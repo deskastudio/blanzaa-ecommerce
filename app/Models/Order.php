@@ -192,15 +192,6 @@ class Order extends Model
     }
 
     /**
-     * Check if payment proof can be uploaded
-     */
-    public function canUploadPaymentProof(): bool
-    {
-        return $this->payment_status === self::PAYMENT_STATUS_PENDING && 
-               $this->status !== self::STATUS_CANCELLED;
-    }
-
-    /**
      * Scope for user orders
      */
     public function scopeForUser($query, $userId)
@@ -223,4 +214,62 @@ class Order extends Model
     {
         return $query->where('status', self::STATUS_DELIVERED);
     }
+
+    // TAMBAHKAN methods ini di Order.php model:
+
+/**
+ * Check if payment proof is uploaded
+ */
+public function hasPaymentProof(): bool
+{
+    return !empty($this->payment_proof);
+}
+
+/**
+ * Get effective payment status - SMART DETECTION
+ */
+public function getEffectivePaymentStatusAttribute(): string
+{
+    // Jika payment proof ada tapi status masih pending = sedang verifikasi
+    if ($this->hasPaymentProof() && $this->payment_status === 'pending') {
+        return 'pending_verification';
+    }
+    
+    return $this->payment_status;
+}
+
+/**
+ * Check if payment is under verification
+ */
+public function isPaymentUnderVerification(): bool
+{
+    return $this->hasPaymentProof() && $this->payment_status === 'pending';
+}
+
+/**
+ * Get payment status label for display
+ */
+public function getPaymentStatusLabelAttribute(): string
+{
+    $status = $this->effective_payment_status;
+    
+    return match($status) {
+        'pending' => $this->hasPaymentProof() ? 'Pending Verification' : 'Pending Payment',
+        'pending_verification' => 'Pending Verification',
+        'paid' => 'Paid',
+        'failed' => 'Failed',
+        'refunded' => 'Refunded',
+        default => ucfirst($status)
+    };
+}
+
+/**
+ * Updated canUploadPaymentProof method
+ */
+public function canUploadPaymentProof(): bool
+{
+    return $this->payment_method === 'bank_transfer' && 
+           $this->payment_status === self::PAYMENT_STATUS_PENDING && 
+           !in_array($this->status, [self::STATUS_CANCELLED, self::STATUS_DELIVERED]);
+}
 }

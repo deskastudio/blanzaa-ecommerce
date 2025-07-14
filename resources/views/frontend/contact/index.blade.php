@@ -1,6 +1,6 @@
 @extends('layouts.frontend')
 
-@section('title', 'Contact Us - Exclusive Electronics Store')
+@section('title', 'Contact Us - Blanzaa Electronics Store')
 
 @section('content')
 <div class="max-w-7xl mx-auto px-4 py-8">
@@ -125,8 +125,8 @@
                         <div>
                             <h3 class="font-semibold text-gray-900 mb-1">Email</h3>
                             <p class="text-gray-600">
-                                <a href="mailto:info@exclusive-electronics.com" class="hover:text-red-500">info@exclusive-electronics.com</a><br>
-                                <a href="mailto:support@exclusive-electronics.com" class="hover:text-red-500">support@exclusive-electronics.com</a>
+                                <a href="mailto:info@blanzaa-electronics.com" class="hover:text-red-500">info@blanzaa-electronics.com</a><br>
+                                <a href="mailto:support@blanzaa-electronics.com" class="hover:text-red-500">support@blanzaa-electronics.com</a>
                             </p>
                         </div>
                     </div>

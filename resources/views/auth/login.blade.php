@@ -74,22 +74,8 @@
                                 class="bg-red-500 hover:bg-red-600 text-white font-medium py-3 px-8 rounded transition-colors">
                             Log In
                         </button>
-                        
-                        <a href="#" class="text-red-500 hover:text-red-600 text-sm">
-                            Forget Password?
-                        </a>
                     </div>
 
-                    <!-- Remember Me -->
-                    <div class="flex items-center">
-                        <input type="checkbox" 
-                               id="remember" 
-                               name="remember" 
-                               class="h-4 w-4 text-red-500 focus:ring-red-500 border-gray-300 rounded">
-                        <label for="remember" class="ml-2 block text-sm text-gray-700">
-                            Remember me
-                        </label>
-                    </div>
                 </form>
 
                 <!-- Sign Up Link -->
