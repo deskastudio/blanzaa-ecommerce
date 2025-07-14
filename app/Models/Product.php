@@ -28,6 +28,7 @@ class Product extends Model
         'is_active',
         'is_featured',
         'meta_title',
+        'image',
         'meta_description',
     ];
 

@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Brand;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ProductController extends Controller
 {
@@ -15,17 +16,16 @@ class ProductController extends Controller
     {
         // Get categories for filter
         $categories = Category::withCount('products')
-            ->where('is_active', true)
             ->orderBy('name')
             ->get();
 
-        // Get brands for filter (if Brand model exists)
-        $brands = collect();
-        if (class_exists('\App\Models\Brand')) {
-            $brands = Brand::where('is_active', true)
-                ->orderBy('name')
-                ->get();
-        }
+        // Get brands for filter - fixed to use brand column from products table
+        $brands = Product::select('brand')
+            ->whereNotNull('brand')
+            ->where('brand', '!=', '')
+            ->distinct()
+            ->orderBy('brand')
+            ->pluck('brand');
 
         // Build query
         $query = Product::with(['category', 'images'])
@@ -43,8 +43,8 @@ class ProductController extends Controller
         }
 
         if ($request->filled('brands')) {
-            $brandIds = explode(',', $request->brands);
-            $query->whereIn('brand_id', $brandIds);
+            $brandNames = explode(',', $request->brands);
+            $query->whereIn('brand', $brandNames);
         }
 
         if ($request->filled('price_range')) {
@@ -54,19 +54,13 @@ class ProductController extends Controller
             }
         }
 
-        if ($request->filled('rating')) {
-            // This would need a proper rating system
-            // For now, we'll just use a placeholder
-        }
-
         if ($request->filled('in_stock')) {
             $query->where('stock_quantity', '>', 0);
         }
 
         if ($request->filled('on_sale')) {
-            if (\Schema::hasColumn('products', 'discount_percentage')) {
-                $query->where('discount_percentage', '>', 0);
-            }
+            $query->whereNotNull('compare_price')
+                  ->whereColumn('compare_price', '>', 'price');
         }
 
         // Apply sorting
@@ -78,10 +72,11 @@ class ProductController extends Controller
                 $query->orderBy('price', 'desc');
                 break;
             case 'popular':
-                $query->inRandomOrder(); // Replace with actual popularity logic
+                $query->orderBy('is_featured', 'desc')
+                      ->orderBy('created_at', 'desc');
                 break;
-            case 'rating':
-                $query->inRandomOrder(); // Replace with actual rating logic
+            case 'name':
+                $query->orderBy('name', 'asc');
                 break;
             default:
                 $query->orderBy('created_at', 'desc');
@@ -93,10 +88,12 @@ class ProductController extends Controller
         return view('frontend.products.index', compact('products', 'categories', 'brands'));
     }
 
-    public function show(Product $product)
+    public function show($slug)
     {
-        // Load relationships
-        $product->load(['category', 'images']);
+        $product = Product::with(['category', 'images'])
+            ->where('slug', $slug)
+            ->where('is_active', true)
+            ->firstOrFail();
 
         // Get related products from same category
         $relatedProducts = Product::with(['category', 'images'])
@@ -111,8 +108,10 @@ class ProductController extends Controller
         return view('frontend.products.show', compact('product', 'relatedProducts'));
     }
 
-    public function category(Category $category)
+    public function category($slug)
     {
+        $category = Category::where('slug', $slug)->firstOrFail();
+        
         $products = Product::with(['category', 'images'])
             ->where('category_id', $category->id)
             ->where('is_active', true)
@@ -123,9 +122,12 @@ class ProductController extends Controller
         return view('frontend.products.category', compact('category', 'products'));
     }
 
-    public function quickView(Product $product)
+    public function quickView($slug)
     {
-        $product->load(['category', 'images']);
+        $product = Product::with(['category', 'images'])
+            ->where('slug', $slug)
+            ->where('is_active', true)
+            ->firstOrFail();
         
         return view('frontend.products.quick-view', compact('product'));
     }
@@ -144,7 +146,9 @@ class ProductController extends Controller
             ->where(function($queryBuilder) use ($query) {
                 $queryBuilder->where('name', 'like', '%' . $query . '%')
                            ->orWhere('description', 'like', '%' . $query . '%')
-                           ->orWhere('short_description', 'like', '%' . $query . '%');
+                           ->orWhere('short_description', 'like', '%' . $query . '%')
+                           ->orWhere('sku', 'like', '%' . $query . '%')
+                           ->orWhere('brand', 'like', '%' . $query . '%');
             })
             ->orderBy('created_at', 'desc')
             ->paginate(12);
