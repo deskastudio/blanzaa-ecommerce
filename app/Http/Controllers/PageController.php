@@ -5,9 +5,57 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
+use App\Models\Product;
+use App\Models\Category;
 
 class PageController extends Controller
 {
+    /**
+     * Show the home page
+     */
+    public function home()
+    {
+        // Get top categories with product count
+        $topCategories = Category::withCount('products')
+            ->orderBy('products_count', 'desc')
+            ->take(10)
+            ->get();
+
+        // Get featured products (menggantikan best selling)
+        $featuredProducts = Product::with(['category', 'images'])
+            ->featured() // menggunakan scope featured
+            ->active()
+            ->inStock()
+            ->orderBy('created_at', 'desc')
+            ->take(8)
+            ->get();
+
+        // Get flash sale products (produk dengan discount)
+        $flashSaleProducts = Product::with(['category', 'images'])
+            ->active()
+            ->inStock()
+            ->whereNotNull('compare_price')
+            ->whereColumn('compare_price', '>', 'price')
+            ->orderBy('created_at', 'desc')
+            ->take(10)
+            ->get();
+
+        // Get latest products
+        $latestProducts = Product::with(['category', 'images'])
+            ->active()
+            ->inStock()
+            ->orderBy('created_at', 'desc')
+            ->take(12)
+            ->get();
+
+        return view('frontend.home', compact(
+            'topCategories',
+            'featuredProducts',
+            'flashSaleProducts',
+            'latestProducts'
+        ));
+    }
+
     /**
      * Show the contact page
      */
@@ -47,6 +95,7 @@ class PageController extends Controller
     {
         return view('frontend.faq.index');
     }
+
     public function contactSubmit(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -104,5 +153,40 @@ class PageController extends Controller
                 'message' => 'Sorry, there was an error sending your message. Please try again later.'
             ], 500);
         }
+    }
+
+    /**
+     * Show featured products page
+     */
+    public function featured(Request $request)
+    {
+        // Build query for featured products
+        $query = Product::with(['category', 'images'])
+            ->featured() // menggunakan scope featured
+            ->active()
+            ->inStock();
+
+        // Apply sorting
+        switch ($request->get('sort', 'latest')) {
+            case 'price_low':
+                $query->orderBy('price', 'asc');
+                break;
+            case 'price_high':
+                $query->orderBy('price', 'desc');
+                break;
+            case 'popular':
+                $query->orderBy('created_at', 'desc'); // atau bisa menggunakan order berdasarkan views/sales
+                break;
+            case 'name':
+                $query->orderBy('name', 'asc');
+                break;
+            default: // latest
+                $query->orderBy('created_at', 'desc');
+        }
+
+        // Paginate results
+        $products = $query->paginate(12)->withQueryString();
+
+        return view('frontend.products.featured', compact('products'));
     }
 }

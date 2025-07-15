@@ -1,6 +1,6 @@
 @extends('layouts.frontend')
 
-@section('title', 'Home - Exclusive Electronics Store')
+@section('title', 'Home - Blanzaa Electronics Store')
 
 @section('content')
 <div class="max-w-7xl mx-auto px-4">
@@ -133,6 +133,14 @@
                     </div>
                     @endif
                     
+                    <!-- Featured Badge -->
+                    @if($product->is_featured)
+                    <div class="absolute top-2 left-2 {{ $product->discount_percentage ? 'mt-8' : '' }} bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs px-2 py-1 rounded-full z-10 font-semibold flex items-center featured-badge">
+                        <i class="fas fa-star text-xs mr-1"></i>
+                        FEATURED
+                    </div>
+                    @endif
+                    
                     <!-- Wishlist & View Icons -->
                     <div class="absolute top-2 right-2 space-y-2 z-10">
                         <button onclick="toggleWishlist({{ $product->id }})" class="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow hover:bg-gray-50 transition-colors">
@@ -180,10 +188,10 @@
                     <div class="flex items-center">
                         <div class="flex text-yellow-400 text-sm">
                             @for($i = 1; $i <= 5; $i++)
-                                <i class="fas fa-star {{ $i <= floor($product->average_rating) ? '' : 'text-gray-300' }}"></i>
+                                <i class="fas fa-star {{ $i <= floor($product->average_rating ?? 4) ? '' : 'text-gray-300' }}"></i>
                             @endfor
                         </div>
-                        <span class="text-gray-500 text-sm ml-1">({{ $product->review_count }})</span>
+                        <span class="text-gray-500 text-sm ml-1">({{ $product->review_count ?? 0 }})</span>
                     </div>
                 </div>
             </div>
@@ -246,30 +254,38 @@
     </div>
 </section>
 
-<!-- Best Selling Products -->
-@if($bestSellingProducts->count() > 0)
+<!-- Featured Products Section (Menggantikan Best Selling) -->
+@if($featuredProducts->count() > 0)
 <section class="max-w-7xl mx-auto px-4 py-16 border-t">
     <div class="flex items-center mb-8">
         <div class="w-5 h-10 bg-red-500 rounded mr-4"></div>
-        <span class="text-red-500 font-semibold">This Month</span>
+        <span class="text-red-500 font-semibold">Featured</span>
     </div>
     
     <div class="flex flex-col lg:flex-row lg:justify-between lg:items-center mb-8">
-        <h2 class="text-3xl font-bold mb-4 lg:mb-0">Best Selling Products</h2>
-        <a href="{{ route('products.index', ['sort' => 'popular']) }}" 
+        <h2 class="text-3xl font-bold mb-4 lg:mb-0">Featured Products</h2>
+        <a href="{{ route('products.featured') }}" 
            class="bg-red-500 text-white px-6 py-2 rounded hover:bg-red-600 transition-colors font-medium">
             View All
         </a>
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        @foreach($bestSellingProducts->take(4) as $product)
+        @foreach($featuredProducts->take(4) as $product)
         <div class="group cursor-pointer">
             <div class="relative bg-gray-100 rounded p-4 mb-4 aspect-square overflow-hidden">
-                <!-- Best Seller Badge -->
-                <div class="absolute top-2 left-2 bg-green-500 text-white text-xs px-2 py-1 rounded z-10">
-                    {{ $product->total_sold }} sold
+                <!-- Featured Badge -->
+                <div class="absolute top-2 left-2 bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs px-2 py-1 rounded-full z-10 font-semibold flex items-center featured-badge">
+                    <i class="fas fa-star text-xs mr-1"></i>
+                    FEATURED
                 </div>
+                
+                <!-- Discount Badge (if applicable) -->
+                @if($product->discount_percentage)
+                <div class="absolute top-2 left-2 mt-8 bg-red-500 text-white text-xs px-2 py-1 rounded z-10">
+                    -{{ $product->discount_percentage }}%
+                </div>
+                @endif
                 
                 <!-- Wishlist & View Icons -->
                 <div class="absolute top-2 right-2 space-y-2 z-10">
@@ -318,10 +334,10 @@
                 <div class="flex items-center">
                     <div class="flex text-yellow-400 text-sm">
                         @for($i = 1; $i <= 5; $i++)
-                            <i class="fas fa-star {{ $i <= floor($product->average_rating) ? '' : 'text-gray-300' }}"></i>
+                            <i class="fas fa-star {{ $i <= floor($product->average_rating ?? 4) ? '' : 'text-gray-300' }}"></i>
                         @endfor
                     </div>
-                    <span class="text-gray-500 text-sm ml-1">({{ $product->review_count }})</span>
+                    <span class="text-gray-500 text-sm ml-1">({{ $product->review_count ?? 0 }})</span>
                 </div>
             </div>
         </div>
@@ -360,6 +376,14 @@
                 </div>
                 @endif
                 
+                <!-- Featured Badge -->
+                @if($product->is_featured)
+                <div class="absolute top-2 left-2 {{ $loop->iteration <= 2 ? 'mt-8' : '' }} bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs px-2 py-1 rounded-full z-10 font-semibold flex items-center featured-badge">
+                    <i class="fas fa-star text-xs mr-1"></i>
+                    FEATURED
+                </div>
+                @endif
+                
                 <!-- Wishlist & View Icons -->
                 <div class="absolute top-2 right-2 space-y-2 z-10">
                     <button onclick="toggleWishlist({{ $product->id }})" class="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow hover:bg-gray-50 transition-colors">
@@ -407,10 +431,10 @@
                 <div class="flex items-center">
                     <div class="flex text-yellow-400 text-sm">
                         @for($i = 1; $i <= 5; $i++)
-                            <i class="fas fa-star {{ $i <= floor($product->average_rating) ? '' : 'text-gray-300' }}"></i>
+                            <i class="fas fa-star {{ $i <= floor($product->average_rating ?? 4) ? '' : 'text-gray-300' }}"></i>
                         @endfor
                     </div>
-                    <span class="text-gray-500 text-sm ml-1">({{ $product->review_count }})</span>
+                    <span class="text-gray-500 text-sm ml-1">({{ $product->review_count ?? 0 }})</span>
                 </div>
             </div>
         </div>
@@ -426,7 +450,7 @@
 </section>
 @endif
 
-<!-- Featured Banner -->
+<!-- Enhanced Music Experience Banner -->
 <section class="max-w-7xl mx-auto px-4 py-16">
     <div class="bg-black text-white rounded-lg p-8 lg:p-16 relative overflow-hidden">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
@@ -437,32 +461,74 @@
                 <!-- Countdown Timer -->
                 <div class="flex space-x-4 mb-8">
                     <div class="bg-white text-black rounded-full w-16 h-16 flex flex-col items-center justify-center">
-                        <div class="text-sm font-bold" id="banner-hours">23</div>
-                        <div class="text-xs">Hours</div>
-                    </div>
-                    <div class="bg-white text-black rounded-full w-16 h-16 flex flex-col items-center justify-center">
-                        <div class="text-sm font-bold" id="banner-days">05</div>
+                        <div class="text-sm font-bold" id="music-days">23</div>
                         <div class="text-xs">Days</div>
                     </div>
                     <div class="bg-white text-black rounded-full w-16 h-16 flex flex-col items-center justify-center">
-                        <div class="text-sm font-bold" id="banner-minutes">59</div>
+                        <div class="text-sm font-bold" id="music-hours">05</div>
+                        <div class="text-xs">Hours</div>
+                    </div>
+                    <div class="bg-white text-black rounded-full w-16 h-16 flex flex-col items-center justify-center">
+                        <div class="text-sm font-bold" id="music-minutes">59</div>
                         <div class="text-xs">Minutes</div>
                     </div>
                     <div class="bg-white text-black rounded-full w-16 h-16 flex flex-col items-center justify-center">
-                        <div class="text-sm font-bold" id="banner-seconds">35</div>
+                        <div class="text-sm font-bold" id="music-seconds">35</div>
                         <div class="text-xs">Seconds</div>
                     </div>
                 </div>
                 
-                <a href="{{ route('products.category', 'audio') }}" 
-                   class="inline-block bg-green-500 text-white px-8 py-3 rounded hover:bg-green-600 transition-colors font-medium">
-                    Buy Now!
-                </a>
+                @php
+                    // Cari kategori audio/headphones atau produk audio featured
+                    $audioCategory = $topCategories->firstWhere('slug', 'audio') 
+                                  ?? $topCategories->firstWhere('slug', 'headphones')
+                                  ?? $topCategories->firstWhere('name', 'Audio')
+                                  ?? $topCategories->firstWhere('name', 'Headphones');
+                    
+                    // Jika tidak ada kategori audio, gunakan produk featured yang berhubungan dengan audio
+                    $audioProduct = $featuredProducts->filter(function($product) {
+                        return stripos($product->name, 'headphone') !== false 
+                            || stripos($product->name, 'speaker') !== false
+                            || stripos($product->name, 'audio') !== false
+                            || stripos($product->category->name ?? '', 'audio') !== false
+                            || stripos($product->category->name ?? '', 'headphone') !== false;
+                    })->first();
+                @endphp
+                
+                @if($audioCategory)
+                    <a href="{{ route('products.category', $audioCategory->slug) }}" 
+                       class="inline-block bg-green-500 text-white px-8 py-3 rounded hover:bg-green-600 transition-colors font-medium">
+                        Buy Now!
+                    </a>
+
+                    @elseif($audioProduct)
+                    <a href="{{ route('products.show', $audioProduct->slug) }}" 
+                       class="inline-block bg-green-500 text-white px-8 py-3 rounded hover:bg-green-600 transition-colors font-medium">
+                        Buy Now!
+                    </a>
+                @else
+                    <a href="{{ route('products.index', ['search' => 'audio']) }}" 
+                       class="inline-block bg-green-500 text-white px-8 py-3 rounded hover:bg-green-600 transition-colors font-medium">
+                        Buy Now!
+                    </a>
+                @endif
             </div>
             
             <div class="relative">
                 <div class="absolute inset-0 bg-gradient-to-r from-gray-400 to-gray-600 rounded-full opacity-20 blur-3xl"></div>
-                <img src="/images/jbl-speaker.png" alt="JBL Speaker" class="relative z-10 w-full max-w-md mx-auto">
+                
+                @if($audioProduct && $audioProduct->primary_image)
+                    <img src="{{ Storage::url($audioProduct->primary_image->image_path) }}" 
+                         alt="{{ $audioProduct->name }}" 
+                         class="relative z-10 w-full max-w-md mx-auto object-contain">
+                @else
+                    <!-- Default Audio Product Image atau Placeholder -->
+                    <div class="relative z-10 w-full max-w-md mx-auto">
+                        <div class="w-64 h-64 bg-gradient-to-br from-green-400 to-blue-500 rounded-full mx-auto flex items-center justify-center shadow-2xl">
+                            <i class="fas fa-volume-up text-6xl text-white"></i>
+                        </div>
+                    </div>
+                @endif
             </div>
         </div>
     </div>
@@ -521,7 +587,7 @@
 
 @push('scripts')
 <script>
-// Countdown Timer
+// Enhanced Countdown Timer
 function updateCountdown() {
     const now = new Date().getTime();
     const endTime = now + (3 * 24 * 60 * 60 * 1000); // 3 days from now
@@ -533,23 +599,51 @@ function updateCountdown() {
     const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((distance % (1000 * 60)) / 1000);
     
-    document.getElementById('days').textContent = days.toString().padStart(2, '0');
-    document.getElementById('hours').textContent = hours.toString().padStart(2, '0');
-    document.getElementById('minutes').textContent = minutes.toString().padStart(2, '0');
-    document.getElementById('seconds').textContent = seconds.toString().padStart(2, '0');
+    // Update flash sales countdown
+    const flashDays = document.getElementById('days');
+    const flashHours = document.getElementById('hours');
+    const flashMinutes = document.getElementById('minutes');
+    const flashSeconds = document.getElementById('seconds');
     
-    // Update banner countdown
-    if (document.getElementById('banner-hours')) {
-        document.getElementById('banner-hours').textContent = hours.toString().padStart(2, '0');
-        document.getElementById('banner-days').textContent = days.toString().padStart(2, '0');
-        document.getElementById('banner-minutes').textContent = minutes.toString().padStart(2, '0');
-        document.getElementById('banner-seconds').textContent = seconds.toString().padStart(2, '0');
+    if (flashDays) flashDays.textContent = days.toString().padStart(2, '0');
+    if (flashHours) flashHours.textContent = hours.toString().padStart(2, '0');
+    if (flashMinutes) flashMinutes.textContent = minutes.toString().padStart(2, '0');
+    if (flashSeconds) flashSeconds.textContent = seconds.toString().padStart(2, '0');
+}
+
+// Enhanced Music Experience Countdown Timer
+function updateMusicCountdown() {
+    // Set target date: 30 days from now
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + 30);
+    
+    const now = new Date().getTime();
+    const distance = targetDate.getTime() - now;
+    
+    if (distance > 0) {
+        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+        
+        // Update music banner countdown
+        const musicDays = document.getElementById('music-days');
+        const musicHours = document.getElementById('music-hours');
+        const musicMinutes = document.getElementById('music-minutes');
+        const musicSeconds = document.getElementById('music-seconds');
+        
+        if (musicDays) musicDays.textContent = days.toString().padStart(2, '0');
+        if (musicHours) musicHours.textContent = hours.toString().padStart(2, '0');
+        if (musicMinutes) musicMinutes.textContent = minutes.toString().padStart(2, '0');
+        if (musicSeconds) musicSeconds.textContent = seconds.toString().padStart(2, '0');
     }
 }
 
-// Update countdown every second
+// Update countdowns every second
 setInterval(updateCountdown, 1000);
+setInterval(updateMusicCountdown, 1000);
 updateCountdown();
+updateMusicCountdown();
 
 // Product Scrolling
 let scrollPositions = {};
@@ -662,6 +756,9 @@ function updateCartCount() {
             cartCount.textContent = data.count;
             cartCount.classList.remove('hidden');
         }
+    })
+    .catch(error => {
+        console.error('Error updating cart count:', error);
     });
 }
 
@@ -680,7 +777,9 @@ function showNotification(message, type = 'success') {
     setTimeout(() => {
         notification.classList.add('translate-x-full');
         setTimeout(() => {
-            document.body.removeChild(notification);
+            if (document.body.contains(notification)) {
+                document.body.removeChild(notification);
+            }
         }, 300);
     }, 3000);
 }
@@ -688,7 +787,7 @@ function showNotification(message, type = 'success') {
 // Newsletter Subscription
 document.addEventListener('DOMContentLoaded', function() {
     const newsletterForm = document.querySelector('form');
-    if (newsletterForm) {
+    if (newsletterForm && newsletterForm.querySelector('input[type="email"]')) {
         newsletterForm.addEventListener('submit', function(e) {
             e.preventDefault();
             const email = this.querySelector('input[type="email"]').value;
@@ -738,6 +837,30 @@ document.addEventListener('DOMContentLoaded', function() {
     aspect-ratio: 1 / 1;
 }
 
+/* Featured badge gradient animation */
+@keyframes gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.featured-badge {
+    background: linear-gradient(-45deg, #fbbf24, #f59e0b, #d97706, #92400e);
+    background-size: 400% 400%;
+    animation: gradient-shift 3s ease infinite;
+}
+
+/* Pulse animation for music countdown */
+#music-days, #music-hours, #music-minutes, #music-seconds {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
 /* Smooth scrolling for product containers */
 #flash-sales-container,
 #categories-container,
@@ -764,6 +887,30 @@ document.addEventListener('DOMContentLoaded', function() {
     background: #555;
 }
 
+/* Hover effects for product cards */
+.group:hover .group-hover\:scale-105 {
+    transform: scale(1.05);
+}
+
+.group:hover .group-hover\:opacity-100 {
+    opacity: 1;
+}
+
+/* Category icons hover animation */
+.group:hover i {
+    transform: scale(1.1);
+    transition: transform 0.3s ease;
+}
+
+/* Loading animation for images */
+img {
+    transition: opacity 0.3s ease;
+}
+
+img[src=""] {
+    opacity: 0;
+}
+
 /* Responsive improvements */
 @media (max-width: 768px) {
     .grid-cols-2 {
@@ -777,6 +924,65 @@ document.addEventListener('DOMContentLoaded', function() {
     .lg\:text-5xl {
         font-size: 2rem;
     }
+    
+    .lg\:p-16 {
+        padding: 2rem;
+    }
+    
+    .lg\:space-x-8 {
+        margin-left: 0;
+    }
+    
+    .lg\:space-x-8 > * + * {
+        margin-left: 0;
+        margin-top: 1rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .sm\:grid-cols-2 {
+        grid-template-columns: repeat(1, 1fr);
+    }
+    
+    .flex-shrink-0.w-64 {
+        width: 16rem;
+    }
+    
+    .aspect-square {
+        aspect-ratio: 1 / 1;
+    }
+}
+
+/* Animation for countdown numbers */
+@keyframes countdownPulse {
+    0%, 100% { 
+        transform: scale(1);
+        color: inherit;
+    }
+    50% { 
+        transform: scale(1.1);
+        color: #ef4444;
+    }
+}
+
+.countdown-number {
+    animation: countdownPulse 1s ease-in-out infinite;
+}
+
+/* Shimmer effect for loading */
+@keyframes shimmer {
+    0% {
+        background-position: -200px 0;
+    }
+    100% {
+        background-position: calc(200px + 100%) 0;
+    }
+}
+
+.shimmer {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200px 100%;
+    animation: shimmer 1.5s infinite;
 }
 </style>
 @endpush

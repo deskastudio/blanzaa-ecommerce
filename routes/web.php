@@ -29,6 +29,7 @@ Route::prefix('products')->name('products.')->group(function () {
     Route::get('/category/{category:slug}', [ProductController::class, 'category'])->name('category');
     Route::get('/{product:slug}', [ProductController::class, 'show'])->name('show');
     Route::get('/{product}/quick-view', [ProductController::class, 'quickView'])->name('quick-view');
+    Route::get('/products/featured', [PageController::class, 'featured'])->name('featured');
 });
 
 // FIXED: Cart Routes - gunakan parameter yang konsisten

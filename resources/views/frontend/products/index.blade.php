@@ -92,10 +92,10 @@
                         @endphp
                         @foreach($brands as $brand)
                         <label class="flex items-center">
-                            <input type="checkbox" name="brands[]" value="{{ $brand->id }}" 
+                            <input type="checkbox" name="brands[]" value="{{ $brand }}" 
                                    class="rounded border-gray-300 text-red-500 focus:ring-red-500"
-                                   {{ in_array($brand->id, $selectedBrands) ? 'checked' : '' }}>
-                            <span class="ml-2 text-sm">{{ $brand->name }}</span>
+                                   {{ in_array($brand, $selectedBrands) ? 'checked' : '' }}>
+                            <span class="ml-2 text-sm">{{ $brand }}</span>
                         </label>
                         @endforeach
                     </div>
