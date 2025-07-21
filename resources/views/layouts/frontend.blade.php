@@ -577,5 +577,8 @@
     </script>
 
     @stack('scripts')
+    @auth
+    @include('components.chat-widget')
+@endauth
 </body>
 </html>

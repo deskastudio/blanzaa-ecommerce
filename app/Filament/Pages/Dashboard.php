@@ -13,12 +13,10 @@ class Dashboard extends BaseDashboard
     public function getWidgets(): array
     {
         return [
+            // Only load existing widget
             \App\Filament\Widgets\ProductStatsWidget::class,
-            \App\Filament\Widgets\OrderStatsWidget::class,
-            \App\Filament\Widgets\SalesChartWidget::class,
-            \App\Filament\Widgets\RevenueChartWidget::class,
-            \App\Filament\Widgets\TopProductsWidget::class,
-            \App\Filament\Widgets\RecentOrdersWidget::class,
+            
+           
         ];
     }
 

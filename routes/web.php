@@ -9,6 +9,7 @@ use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PageController;
+use App\Http\Controllers\ChatController;  // ADD THIS IMPORT
 use Illuminate\Support\Facades\Route;
 
 // Authentication Routes
@@ -87,6 +88,19 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/{order}/track', [OrderController::class, 'track'])->name('track');
         Route::get('/{order}/invoice', [OrderController::class, 'invoice'])->name('invoice');
         Route::post('/{order}/upload-payment', [OrderController::class, 'uploadPayment'])->name('upload-payment');
+    });
+    
+    // CHAT ROUTES - ADD THIS SECTION
+    Route::prefix('chat')->name('chat.')->group(function () {
+        // Customer routes
+        Route::post('/conversation', [ChatController::class, 'getOrCreateConversation'])->name('conversation');
+        Route::post('/send', [ChatController::class, 'sendMessage'])->name('send');
+        Route::get('/messages', [ChatController::class, 'getMessages'])->name('messages');
+        Route::post('/mark-read', [ChatController::class, 'markAsRead'])->name('mark-read');
+        
+        // Admin routes (access controlled in controller)
+        Route::get('/admin/conversations', [ChatController::class, 'getConversationsForAdmin'])->name('admin.conversations');
+        Route::post('/admin/close', [ChatController::class, 'closeConversation'])->name('admin.close');
     });
 });
 
