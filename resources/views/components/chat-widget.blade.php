@@ -1,24 +1,24 @@
-<!-- Chat Widget dengan Notifikasi Admin -->
+<!-- Fixed Chat Widget - No Duplicates -->
 <div id="chat-widget" class="fixed bottom-4 right-4 z-50">
-    <!-- Chat Toggle Button -->
+    <!-- Toggle Button -->
     <button id="chat-toggle" onclick="toggleChat()" 
-            class="bg-blue-500 hover:bg-blue-600 text-white p-4 rounded-full shadow-lg transition-all duration-300 flex items-center justify-center relative">
-        <svg id="chat-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            class="bg-blue-500 hover:bg-blue-600 text-white p-4 rounded-full shadow-lg transition-colors relative">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-4.126-.98L3 19l1.98-5.874A8.955 8.955 0 013 9c0-4.418 3.582-8 8-8s8 3.582 8 8z">
+                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-4.126-.98L3 19l1.98-5.874A8.955 8.955 0 313 9c0-4.418 3.582-8 8-8s8 3.582 8 8z">
             </path>
         </svg>
-        <span id="unread-badge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-6 w-6 flex items-center justify-center hidden animate-pulse">0</span>
+        <span id="unread-badge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-6 w-6 flex items-center justify-center hidden">0</span>
     </button>
     
     <!-- Chat Box -->
     <div id="chat-box" class="hidden mb-4 bg-white rounded-lg shadow-xl w-80 h-96 flex flex-col">
-        <!-- Chat Header -->
+        <!-- Header -->
         <div class="bg-blue-500 text-white p-4 rounded-t-lg flex justify-between items-center">
-            <h3 class="font-semibold">Customer Support</h3>
+            <h3 class="font-semibold">Support Chat</h3>
             <div class="flex items-center space-x-2">
                 <span id="debug-time" class="text-xs bg-blue-600 px-2 py-1 rounded">0ms</span>
-                <button onclick="closeChat()" class="text-white hover:text-gray-200">
+                <button onclick="closeChat()">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                     </svg>
@@ -26,21 +26,20 @@
             </div>
         </div>
         
-        <!-- Chat Messages -->
-        <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3">
+        <!-- Messages -->
+        <div id="chat-messages" class="flex-1 p-4 overflow-y-auto">
             <div class="text-center text-gray-500 text-sm">
                 <p>Hello! How can we help you today?</p>
             </div>
         </div>
         
-        <!-- Chat Input -->
+        <!-- Input -->
         <div class="p-4 border-t">
             <form id="chat-form" onsubmit="sendMessage(event)" class="flex space-x-2">
                 <input type="text" id="message-input" placeholder="Type your message..." 
-                       class="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                       maxlength="1000" required>
-                <button type="submit" id="send-button"
-                        class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                       class="flex-1 border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       maxlength="500" required>
+                <button type="submit" id="send-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
                               d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
@@ -51,137 +50,31 @@
     </div>
 </div>
 
-<!-- Toast Notification Container -->
-<div id="notification-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
-
 <script>
-// Chat Widget dengan Notifikasi
-let chatWidget = {
+// FIXED Chat Widget - Prevent Duplicates
+const chat = {
     isOpen: false,
     conversationId: null,
-    pollingInterval: null,
     lastMessageId: 0,
-    allMessages: [],
-    isRefreshing: false,
-    lastRefreshTime: 0,
-    refreshDebounceMs: 1000,
-    lastKnownMessageCount: 0, // Track untuk deteksi pesan baru
+    messages: new Map(), // Use Map to prevent duplicates by ID
+    polling: null,
+    isLoading: false,
+    hasLoadedInitial: false,
     
-    // Initialize
     async init() {
         @auth
-            await this.getOrCreateConversation();
-            this.requestNotificationPermission();
+            await this.getConversation();
+            // Only start polling after conversation is ready
+            if (this.conversationId) {
+                this.startPolling();
+            }
         @endauth
     },
     
-    // Request notification permission
-    requestNotificationPermission() {
-        if ("Notification" in window && Notification.permission === "default") {
-            Notification.requestPermission();
-        }
-    },
-    
-    // Show browser notification
-    showBrowserNotification(message, senderName) {
-        if ("Notification" in window && Notification.permission === "granted") {
-            const notification = new Notification(`New message from ${senderName}`, {
-                body: message.length > 50 ? message.substring(0, 50) + '...' : message,
-                icon: '/favicon.ico',
-                tag: 'chat-message'
-            });
-            
-            notification.onclick = function() {
-                window.focus();
-                openChat();
-                notification.close();
-            };
-            
-            // Auto close after 5 seconds
-            setTimeout(() => notification.close(), 5000);
-        }
-    },
-    
-    // Show toast notification (persistent)
-    showToastNotification(message, senderName) {
-        const container = document.getElementById('notification-container');
-        const toast = document.createElement('div');
-        toast.className = 'bg-blue-500 text-white px-6 py-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full persistent-notification';
+    async getConversation() {
+        if (this.isLoading) return;
+        this.isLoading = true;
         
-        const toastId = 'toast-' + Date.now();
-        toast.innerHTML = `
-            <div class="flex items-center space-x-3">
-                <div class="bg-blue-600 rounded-full p-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-4.126-.98L3 19l1.98-5.874A8.955 8.955 0 313 9c0-4.418 3.582-8 8-8s8 3.582 8 8z">
-                        </path>
-                    </svg>
-                </div>
-                <div class="flex-1 cursor-pointer" onclick="chatWidget.handleNotificationClick('${toastId}')">
-                    <p class="font-semibold text-sm">${senderName}</p>
-                    <p class="text-sm opacity-90">${message.length > 40 ? message.substring(0, 40) + '...' : message}</p>
-                    <p class="text-xs opacity-75 mt-1">Click to open chat</p>
-                </div>
-                <button onclick="chatWidget.closeToast('${toastId}')" class="text-white hover:text-gray-200 ml-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
-            </div>
-        `;
-        
-        toast.id = toastId;
-        container.appendChild(toast);
-        
-        // Animate in
-        setTimeout(() => {
-            toast.classList.remove('translate-x-full');
-        }, 100);
-        
-        // Make it pulse every 3 seconds to grab attention
-        setInterval(() => {
-            if (document.getElementById(toastId)) {
-                toast.classList.add('animate-bounce');
-                setTimeout(() => {
-                    toast.classList.remove('animate-bounce');
-                }, 1000);
-            }
-        }, 5000);
-        
-        // NO AUTO-REMOVAL - stays until chat opened or manually closed
-    },
-    
-    // Handle notification click
-    handleNotificationClick(toastId) {
-        openChat();
-        this.clearAllNotifications(); // Clear all notifications when chat opened
-    },
-    
-    // Clear all persistent notifications
-    clearAllNotifications() {
-        const notifications = document.querySelectorAll('.persistent-notification');
-        notifications.forEach(notification => {
-            notification.classList.add('translate-x-full');
-            setTimeout(() => {
-                notification.remove();
-            }, 300);
-        });
-    },
-    
-    // Close toast notification
-    closeToast(toastId) {
-        const toast = document.getElementById(toastId);
-        if (toast) {
-            toast.classList.add('translate-x-full');
-            setTimeout(() => {
-                toast.remove();
-            }, 300);
-        }
-    },
-    
-    // Get or create conversation
-    async getOrCreateConversation() {
         try {
             const response = await fetch('/chat/conversation', {
                 method: 'POST',
@@ -194,185 +87,39 @@ let chatWidget = {
             if (response.ok) {
                 const data = await response.json();
                 this.conversationId = data.conversation_id;
+                console.log('✅ Conversation ready:', this.conversationId);
                 
-                await this.refreshMessages();
-                this.startPolling();
+                // Load unread count immediately
+                await this.updateUnreadBadge();
             }
         } catch (error) {
-            console.error('Error creating conversation:', error);
-        }
-    },
-    
-    // Refresh messages with notification detection
-    async refreshMessages() {
-        if (this.isRefreshing) {
-            return;
-        }
-        
-        const now = Date.now();
-        if (now - this.lastRefreshTime < this.refreshDebounceMs) {
-            return;
-        }
-        
-        if (!this.conversationId) return;
-        
-        this.isRefreshing = true;
-        this.lastRefreshTime = now;
-        const startTime = performance.now();
-        
-        try {
-            const url = `/chat/messages?conversation_id=${this.conversationId}&after_id=0`;
-            const response = await fetch(url);
-            
-            if (response.ok) {
-                const data = await response.json();
-                
-                if (data.messages) {
-                    const newMessageCount = data.messages.length;
-                    const previousMessageCount = this.lastKnownMessageCount;
-                    
-                    // Detect new messages
-                    if (newMessageCount > previousMessageCount && previousMessageCount > 0) {
-                        const newMessages = data.messages.slice(previousMessageCount);
-                        
-                        // Check for admin messages
-                        const newAdminMessages = newMessages.filter(msg => msg.is_from_admin);
-                        
-                        if (newAdminMessages.length > 0) {
-                            // Show notifications for new admin messages
-                            newAdminMessages.forEach(msg => {
-                                this.showNotification(msg.message, msg.sender_name);
-                            });
-                            
-                            // Update unread badge if chat is closed
-                            if (!this.isOpen) {
-                                this.updateUnreadBadge(newAdminMessages.length);
-                            }
-                        }
-                    }
-                    
-                    // Update local state
-                    this.allMessages = data.messages;
-                    this.lastKnownMessageCount = newMessageCount;
-                    
-                    if (this.allMessages.length > 0) {
-                        this.lastMessageId = Math.max(...this.allMessages.map(m => m.id));
-                    }
-                    
-                    // Re-render if chat is open
-                    if (this.isOpen) {
-                        this.renderAllMessages();
-                        this.updateUnreadBadge(0); // Clear badge when chat is open
-                    }
-                }
-                
-                const endTime = performance.now();
-                this.updateDebugTime(endTime - startTime);
-            }
-        } catch (error) {
-            console.error('Error loading messages:', error);
+            console.error('❌ Conversation error:', error);
         } finally {
-            this.isRefreshing = false;
+            this.isLoading = false;
         }
     },
     
-    // Show notification (both toast and browser)
-    showNotification(message, senderName) {
-        // Show toast notification
-        this.showToastNotification(message, senderName);
-        
-        // Show browser notification if page is not visible
-        if (document.hidden) {
-            this.showBrowserNotification(message, senderName);
-        }
-        
-        // Play notification sound (optional)
-        this.playNotificationSound();
-    },
-    
-    // Play notification sound
-    playNotificationSound() {
-        try {
-            // Create audio element for notification sound
-            const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmMbBjiS2e/CdSgFL4PQ8tiKOQgZab7t4ptNEQtVqOLwtW'); 
-            audio.volume = 0.3;
-            audio.play().catch(() => {}); // Ignore errors if autoplay blocked
-        } catch (error) {
-            // Ignore audio errors
-        }
-    },
-    
-    // Update unread badge
-    updateUnreadBadge(additionalCount = 0) {
-        const badge = document.getElementById('unread-badge');
-        
-        if (this.isOpen) {
-            badge.classList.add('hidden');
-            return;
-        }
-        
-        // Count unread admin messages
-        const unreadCount = this.allMessages.filter(msg => 
-            msg.is_from_admin && !msg.is_read
-        ).length + additionalCount;
-        
-        if (unreadCount > 0) {
-            badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
-            badge.classList.remove('hidden');
-            badge.classList.add('animate-pulse');
-        } else {
-            badge.classList.add('hidden');
-            badge.classList.remove('animate-pulse');
-        }
-    },
-    
-    // Render all messages
-    renderAllMessages() {
-        const container = document.getElementById('chat-messages');
-        container.innerHTML = '';
-        
-        if (this.allMessages.length === 0) {
-            container.innerHTML = `
-                <div class="text-center text-gray-500 text-sm">
-                    <p>Hello! How can we help you today?</p>
-                </div>
-            `;
-            return;
-        }
-        
-        const fragment = document.createDocumentFragment();
-        
-        this.allMessages.forEach(message => {
-            const div = document.createElement('div');
-            div.className = `flex ${message.is_from_admin ? 'justify-start' : 'justify-end'}`;
-            
-            const isNew = message.is_from_admin && !message.is_read;
-            const messageClass = message.is_from_admin 
-                ? `bg-gray-100 text-gray-800 ${isNew ? 'ring-2 ring-blue-300' : ''}` 
-                : 'bg-blue-500 text-white';
-            
-            div.innerHTML = `
-                <div class="max-w-xs px-3 py-2 rounded-lg ${messageClass}">
-                    ${message.is_from_admin ? '<div class="text-xs text-gray-500 mb-1">Support Agent</div>' : ''}
-                    <p class="text-sm">${this.escapeHtml(message.message)}</p>
-                    <p class="text-xs opacity-75 mt-1">${message.formatted_time}</p>
-                    ${isNew ? '<div class="text-xs text-blue-600 font-semibold mt-1">New</div>' : ''}
-                </div>
-            `;
-            
-            fragment.appendChild(div);
-        });
-        
-        container.appendChild(fragment);
-        container.scrollTop = container.scrollHeight;
-    },
-    
-    // Send message
     async sendMessage(message) {
-        if (!message.trim() || !this.conversationId) return false;
+        if (!message.trim() || !this.conversationId || this.isLoading) return false;
         
         const startTime = performance.now();
-        this.showOptimisticMessage(message);
+        this.isLoading = true;
+        
+        // Disable input
+        const input = document.getElementById('message-input');
+        const button = document.getElementById('send-btn');
+        input.disabled = true;
+        button.disabled = true;
+        
+        // Show optimistic message
+        const tempId = 'temp_' + Date.now();
+        this.addMessageToMap({
+            id: tempId,
+            message: message,
+            is_from_admin: false,
+            formatted_time: 'Sending...',
+            optimistic: true
+        });
         
         try {
             const response = await fetch('/chat/send', {
@@ -389,92 +136,272 @@ let chatWidget = {
             
             if (response.ok) {
                 const data = await response.json();
-                const endTime = performance.now();
-                this.updateDebugTime(endTime - startTime);
                 
-                this.removeOptimisticMessage();
+                // Remove optimistic message
+                this.messages.delete(tempId);
                 
-                if (data.data) {
-                    const newMessage = {
+                if (data.success && data.data) {
+                    // Add real message
+                    this.addMessageToMap({
                         id: data.data.id,
                         message: data.data.message,
+                        sender_name: data.data.sender_name,
                         is_from_admin: data.data.is_from_admin,
-                        formatted_time: data.data.formatted_time,
-                        sender_name: data.data.sender_name
-                    };
+                        formatted_time: data.data.formatted_time
+                    });
                     
-                    this.allMessages.push(newMessage);
-                    this.lastMessageId = Math.max(this.lastMessageId, newMessage.id);
-                    this.lastKnownMessageCount = this.allMessages.length;
-                    
-                    this.renderAllMessages();
+                    this.lastMessageId = Math.max(this.lastMessageId, data.data.id);
                 }
                 
+                this.renderMessages();
+                this.updateDebugTime(performance.now() - startTime);
                 return true;
-            } else {
-                this.removeOptimisticMessage();
-                return false;
             }
         } catch (error) {
-            console.error('Error sending message:', error);
-            this.removeOptimisticMessage();
-            return false;
+            console.error('❌ Send error:', error);
+            // Remove optimistic message on error
+            this.messages.delete(tempId);
+            this.renderMessages();
+        } finally {
+            this.isLoading = false;
+            input.disabled = false;
+            button.disabled = false;
+        }
+        
+        return false;
+    },
+    
+    async loadNewMessages() {
+        if (!this.conversationId || this.isLoading) return;
+        
+        try {
+            const afterId = this.hasLoadedInitial ? this.lastMessageId : 0;
+            const response = await fetch(
+                `/chat/messages?conversation_id=${this.conversationId}&after_id=${afterId}`
+            );
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                if (data.messages && data.messages.length > 0) {
+                    console.log(`📨 Loading ${data.messages.length} messages (after_id: ${afterId})`);
+                    
+                    let hasNewMessages = false;
+                    
+                    data.messages.forEach(msg => {
+                        // Only add if not already exists
+                        if (!this.messages.has(msg.id)) {
+                            this.addMessageToMap(msg);
+                            this.lastMessageId = Math.max(this.lastMessageId, msg.id);
+                            hasNewMessages = true;
+                        }
+                    });
+                    
+                    if (hasNewMessages) {
+                        this.renderMessages();
+                        
+                        // Show notification if chat is closed
+                        if (!this.isOpen) {
+                            const adminMessages = data.messages.filter(m => m.is_from_admin);
+                            if (adminMessages.length > 0) {
+                                this.showNotification(adminMessages[adminMessages.length - 1]);
+                            }
+                        }
+                        
+                        this.updateUnreadBadge();
+                    }
+                } else {
+                    console.log('📨 No new messages');
+                }
+                
+                this.hasLoadedInitial = true;
+                this.updateDebugTime(data.debug_time || 0);
+            }
+        } catch (error) {
+            console.error('❌ Load messages error:', error);
         }
     },
     
-    // Show optimistic message
-    showOptimisticMessage(message) {
+    // Add message to Map (prevents duplicates)
+    addMessageToMap(message) {
+        this.messages.set(message.id, message);
+        
+        // Keep only last 50 messages to prevent memory issues
+        if (this.messages.size > 50) {
+            const sortedKeys = Array.from(this.messages.keys()).sort((a, b) => {
+                // Handle temp IDs
+                if (typeof a === 'string' && a.startsWith('temp_')) return 1;
+                if (typeof b === 'string' && b.startsWith('temp_')) return -1;
+                return a - b;
+            });
+            
+            // Remove oldest messages
+            const toRemove = sortedKeys.slice(0, this.messages.size - 50);
+            toRemove.forEach(key => this.messages.delete(key));
+        }
+    },
+    
+    async updateUnreadBadge() {
+        if (!this.conversationId) return;
+        
+        try {
+            const response = await fetch(`/chat/unread-count?conversation_id=${this.conversationId}`);
+            if (response.ok) {
+                const data = await response.json();
+                const badge = document.getElementById('unread-badge');
+                
+                if (data.count > 0 && !this.isOpen) {
+                    badge.textContent = data.count > 99 ? '99+' : data.count;
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            }
+        } catch (error) {
+            console.error('❌ Unread count error:', error);
+        }
+    },
+    
+    renderMessages() {
         const container = document.getElementById('chat-messages');
-        const div = document.createElement('div');
-        div.className = 'flex justify-end optimistic-message';
+        const shouldScrollToBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 10;
         
-        div.innerHTML = `
-            <div class="max-w-xs px-3 py-2 rounded-lg bg-blue-400 text-white opacity-75">
-                <p class="text-sm">${this.escapeHtml(message)}</p>
-                <p class="text-xs opacity-75 mt-1">Sending...</p>
-            </div>
-        `;
+        container.innerHTML = '';
         
-        container.appendChild(div);
-        container.scrollTop = container.scrollHeight;
-    },
-    
-    // Remove optimistic message
-    removeOptimisticMessage() {
-        const optimistic = document.querySelector('.optimistic-message');
-        if (optimistic) {
-            optimistic.remove();
+        if (this.messages.size === 0) {
+            container.innerHTML = '<div class="text-center text-gray-500 text-sm"><p>Hello! How can we help you today?</p></div>';
+            return;
+        }
+        
+        // Convert Map to Array and sort by ID
+        const sortedMessages = Array.from(this.messages.values()).sort((a, b) => {
+            // Handle temp IDs
+            if (typeof a.id === 'string' && a.id.startsWith('temp_')) return 1;
+            if (typeof b.id === 'string' && b.id.startsWith('temp_')) return -1;
+            return a.id - b.id;
+        });
+        
+        sortedMessages.forEach(msg => {
+            const div = document.createElement('div');
+            div.className = `mb-3 flex ${msg.is_from_admin ? 'justify-start' : 'justify-end'}`;
+            
+            const bgColor = msg.is_from_admin ? 'bg-gray-100 text-gray-800' : 
+                           msg.optimistic ? 'bg-blue-400 text-white opacity-75' : 
+                           'bg-blue-500 text-white';
+            
+            div.innerHTML = `
+                <div class="max-w-xs px-3 py-2 rounded-lg ${bgColor}">
+                    ${msg.is_from_admin ? `<div class="text-xs text-gray-500 mb-1">${msg.sender_name || 'Support'}</div>` : ''}
+                    <p class="text-sm">${this.escapeHtml(msg.message)}</p>
+                    <p class="text-xs opacity-75 mt-1">${msg.formatted_time}</p>
+                </div>
+            `;
+            
+            container.appendChild(div);
+        });
+        
+        // Maintain scroll position
+        if (shouldScrollToBottom) {
+            container.scrollTop = container.scrollHeight;
         }
     },
     
-    // Update debug time
-    updateDebugTime(timeMs) {
-        const debugElement = document.getElementById('debug-time');
-        if (debugElement) {
-            debugElement.textContent = Math.round(timeMs) + 'ms';
+    showNotification(message) {
+        if ('Notification' in window && Notification.permission === 'granted') {
+            const notification = new Notification('New Message', {
+                body: message.message,
+                icon: '/favicon.ico'
+            });
+            
+            notification.onclick = () => {
+                window.focus();
+                this.openChat();
+            };
+            
+            setTimeout(() => notification.close(), 5000);
         }
     },
     
-    // Start polling
+    async openChat() {
+        document.getElementById('chat-box').classList.remove('hidden');
+        this.isOpen = true;
+        
+        // Load initial messages if not loaded
+        if (!this.hasLoadedInitial) {
+            await this.loadNewMessages();
+        }
+        
+        await this.markAsRead();
+        this.updateUnreadBadge();
+        
+        setTimeout(() => {
+            document.getElementById('message-input').focus();
+        }, 100);
+    },
+    
+    closeChat() {
+        document.getElementById('chat-box').classList.add('hidden');
+        this.isOpen = false;
+    },
+    
+    async markAsRead() {
+        if (!this.conversationId) return;
+        
+        try {
+            await fetch('/chat/mark-read', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                },
+                body: JSON.stringify({
+                    conversation_id: this.conversationId
+                })
+            });
+        } catch (error) {
+            console.error('❌ Mark read error:', error);
+        }
+    },
+    
     startPolling() {
         this.stopPolling();
         
-        this.pollingInterval = setInterval(() => {
-            if (!document.hidden) { // Poll when page is visible
-                this.refreshMessages();
+        // Reduce polling frequency to prevent spam
+        this.polling = setInterval(() => {
+            if (!document.hidden) {
+                this.loadNewMessages();
             }
-        }, 10000); // Poll every 10 seconds
+        }, 15000); // Every 15 seconds
+        
+        console.log('🔄 Polling started (15s interval)');
     },
     
-    // Stop polling
     stopPolling() {
-        if (this.pollingInterval) {
-            clearInterval(this.pollingInterval);
-            this.pollingInterval = null;
+        if (this.polling) {
+            clearInterval(this.polling);
+            this.polling = null;
+            console.log('⏹️ Polling stopped');
         }
     },
     
-    // Escape HTML
+    updateDebugTime(ms) {
+        const debugEl = document.getElementById('debug-time');
+        if (debugEl) {
+            const roundedMs = Math.round(ms);
+            debugEl.textContent = roundedMs + 'ms';
+            
+            // Color coding
+            debugEl.className = 'text-xs px-2 py-1 rounded';
+            if (roundedMs < 100) {
+                debugEl.className += ' bg-green-600';
+            } else if (roundedMs < 500) {
+                debugEl.className += ' bg-yellow-600';
+            } else {
+                debugEl.className += ' bg-red-600';
+            }
+        }
+    },
+    
     escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
@@ -483,104 +410,64 @@ let chatWidget = {
 };
 
 // Global functions
-function toggleChat() {
-    if (chatWidget.isOpen) {
-        closeChat();
+async function toggleChat() {
+    if (chat.isOpen) {
+        chat.closeChat();
     } else {
-        openChat();
+        await chat.openChat();
     }
-}
-
-async function openChat() {
-    const chatBox = document.getElementById('chat-box');
-    chatBox.classList.remove('hidden');
-    chatWidget.isOpen = true;
-    
-    @auth
-        if (!chatWidget.conversationId) {
-            await chatWidget.getOrCreateConversation();
-        } else {
-            if (chatWidget.allMessages.length > 0) {
-                chatWidget.renderAllMessages();
-            }
-            setTimeout(() => {
-                chatWidget.refreshMessages();
-            }, 1000);
-        }
-        chatWidget.startPolling();
-        
-        // Clear unread badge and ALL notifications when opening chat
-        chatWidget.updateUnreadBadge(0);
-        chatWidget.clearAllNotifications();
-    @else
-        document.getElementById('chat-messages').innerHTML = `
-            <div class="text-center text-gray-500 text-sm">
-                <p>Please <a href="/login" class="text-blue-500 hover:underline">login</a> to start a conversation.</p>
-            </div>
-        `;
-    @endauth
-}
-
-function closeChat() {
-    const chatBox = document.getElementById('chat-box');
-    chatBox.classList.add('hidden');
-    chatWidget.isOpen = false;
-    chatWidget.stopPolling();
 }
 
 async function sendMessage(event) {
     event.preventDefault();
     
     const input = document.getElementById('message-input');
-    const button = document.getElementById('send-button');
     const message = input.value.trim();
     
     if (!message) return;
     
-    input.disabled = true;
-    button.disabled = true;
-    
-    const success = await chatWidget.sendMessage(message);
-    
+    const success = await chat.sendMessage(message);
     if (success) {
         input.value = '';
     }
     
-    input.disabled = false;
-    button.disabled = false;
     input.focus();
 }
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    chatWidget.init();
+    chat.init();
+    
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
 });
 
-// Handle visibility change
+// Handle page visibility for better battery usage
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-        chatWidget.stopPolling();
-    } else if (chatWidget.conversationId) {
-        // Resume polling when page becomes visible
-        setTimeout(() => {
-            chatWidget.startPolling();
-        }, 2000);
+        chat.stopPolling();
+    } else if (chat.conversationId) {
+        chat.startPolling();
+        // Immediate refresh when page becomes visible
+        setTimeout(() => chat.loadNewMessages(), 1000);
     }
 });
 
 // Cleanup
 window.addEventListener('beforeunload', () => {
-    chatWidget.stopPolling();
+    chat.stopPolling();
 });
 </script>
 
 <style>
-#chat-widget #chat-box {
+#chat-box {
     animation: slideUp 0.2s ease-out;
 }
 
 @keyframes slideUp {
-    from { transform: translateY(100%); opacity: 0; }
+    from { transform: translateY(20px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
 }
 
@@ -593,55 +480,14 @@ window.addEventListener('beforeunload', () => {
     border-radius: 2px;
 }
 
-.optimistic-message {
-    animation: pulse 1s ease-in-out infinite;
+/* Loading state */
+#send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
-@keyframes pulse {
-    0%, 100% { opacity: 0.75; }
-    50% { opacity: 0.5; }
-}
-
-/* Notification animations */
-#notification-container > div {
-    transition: all 0.3s ease-in-out;
-}
-
-/* Persistent notification styling */
-.persistent-notification {
-    border-left: 4px solid #1e40af;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-}
-
-.persistent-notification:hover {
-    transform: scale(1.02);
-    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
-}
-
-/* Attention-grabbing bounce animation */
-@keyframes bounce {
-    0%, 20%, 53%, 80%, 100% { transform: translateY(0); }
-    40%, 43% { transform: translateY(-10px); }
-    70% { transform: translateY(-5px); }
-    90% { transform: translateY(-2px); }
-}
-
-.animate-bounce {
-    animation: bounce 1s ease-in-out;
-}
-
-/* Unread badge pulse animation */
-@keyframes pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-}
-
-.animate-pulse {
-    animation: pulse 2s infinite;
-}
-
-/* New message highlight */
-.ring-2 {
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+#message-input:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
 }
 </style>

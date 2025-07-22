@@ -6,6 +6,8 @@ use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class LiveChat extends Page
 {
@@ -13,65 +15,182 @@ class LiveChat extends Page
     protected static ?string $navigationLabel = 'Live Chat';
     protected static string $view = 'filament.pages.live-chat';
     
-    // Auto refresh setiap 5 detik
+    // Polling interval
     protected static ?string $pollingInterval = '5s';
     
     public ?int $selectedConversationId = null;
     public string $message = '';
+    
+    // Cache untuk performa
+    public $conversationsCache = null;
+    public $lastCacheTime = null;
 
     public function mount(): void
     {
-        // Tidak auto-select conversation untuk modal style
         $this->selectedConversationId = null;
     }
 
-    // Ambil semua conversations aktif
+    // OPTIMIZED: Get conversations dengan last message
     public function getActiveConversations()
     {
-        return ChatConversation::with(['user', 'admin'])
-            ->where('status', '!=', 'closed')
-            ->orderBy('last_message_at', 'desc')
-            ->get()
-            ->map(function ($conversation) {
-                // Hitung unread messages (tanpa sender_type)
-                $conversation->unread_count = ChatMessage::where('conversation_id', $conversation->id)
-                    ->where('sender_id', '!=', Auth::id()) // Messages bukan dari admin current
-                    ->where('is_read', false)
-                    ->count();
-                return $conversation;
+        $startTime = microtime(true);
+        
+        // Cache untuk 3 detik
+        if ($this->conversationsCache && $this->lastCacheTime && (time() - $this->lastCacheTime) < 3) {
+            return $this->conversationsCache;
+        }
+        
+        try {
+            // Raw SQL dengan last message - OPTIMIZED!
+            $conversations = DB::select("
+                SELECT 
+                    c.id,
+                    c.status,
+                    c.last_message_at,
+                    c.admin_id,
+                    u.id as user_id,
+                    u.name as user_name,
+                    u.email as user_email,
+                    a.name as admin_name,
+                    (
+                        SELECT COUNT(*) 
+                        FROM chat_messages m 
+                        WHERE m.conversation_id = c.id 
+                        AND m.sender_id != ? 
+                        AND m.is_read = 0
+                    ) as unread_count,
+                    (
+                        SELECT m2.message 
+                        FROM chat_messages m2 
+                        WHERE m2.conversation_id = c.id 
+                        ORDER BY m2.created_at DESC 
+                        LIMIT 1
+                    ) as last_message,
+                    (
+                        SELECT u2.name 
+                        FROM chat_messages m3 
+                        JOIN users u2 ON u2.id = m3.sender_id 
+                        WHERE m3.conversation_id = c.id 
+                        ORDER BY m3.created_at DESC 
+                        LIMIT 1
+                    ) as last_message_sender
+                FROM chat_conversations c
+                JOIN users u ON u.id = c.user_id
+                LEFT JOIN users a ON a.id = c.admin_id
+                WHERE c.status != 'closed'
+                ORDER BY c.last_message_at DESC
+                LIMIT 20
+            ", [Auth::id()]);
+            
+            // Convert ke collection dengan last_message
+            $result = collect($conversations)->map(function ($conv) {
+                return (object) [
+                    'id' => $conv->id,
+                    'status' => $conv->status,
+                    'last_message_at' => $conv->last_message_at ? \Carbon\Carbon::parse($conv->last_message_at) : null,
+                    'admin_id' => $conv->admin_id,
+                    'unread_count' => $conv->unread_count,
+                    'last_message' => $conv->last_message,         // ✅ KEY: Ini yang dibutuhkan view
+                    'last_message_sender' => $conv->last_message_sender,  // ✅ KEY: Ini juga
+                    'user' => (object) [
+                        'id' => $conv->user_id,
+                        'name' => $conv->user_name,
+                        'email' => $conv->user_email
+                    ],
+                    'admin' => $conv->admin_name ? (object) ['name' => $conv->admin_name] : null
+                ];
             });
+            
+            // Cache result
+            $this->conversationsCache = $result;
+            $this->lastCacheTime = time();
+            
+            $totalTime = microtime(true) - $startTime;
+            Log::info('getActiveConversations took: ' . round($totalTime * 1000, 2) . 'ms');
+            
+            return $result;
+            
+        } catch (\Exception $e) {
+            Log::error('getActiveConversations error: ' . $e->getMessage());
+            return collect();
+        }
     }
 
-    // Ambil messages dari conversation yang dipilih
+    // OPTIMIZED: Get messages dengan raw SQL
     public function getSelectedMessages()
     {
         if (!$this->selectedConversationId) {
             return collect();
         }
 
-        return ChatMessage::with('sender')
-            ->where('conversation_id', $this->selectedConversationId)
-            ->orderBy('created_at', 'asc')
-            ->get()
-            ->map(function ($message) {
-                // Tentukan sender type berdasarkan user role atau logika lain
-                $message->sender_type = $message->sender_id === Auth::id() ? 'admin' : 'user';
-                return $message;
+        $startTime = microtime(true);
+        
+        try {
+            // Raw SQL untuk performa
+            $messages = DB::select("
+                SELECT 
+                    m.id,
+                    m.message,
+                    m.sender_id,
+                    m.created_at,
+                    u.name as sender_name
+                FROM chat_messages m
+                JOIN users u ON u.id = m.sender_id
+                WHERE m.conversation_id = ?
+                ORDER BY m.created_at ASC
+                LIMIT 100
+            ", [$this->selectedConversationId]);
+            
+            // Convert dan tambah sender_type
+            $result = collect($messages)->map(function ($msg) {
+                return (object) [
+                    'id' => $msg->id,
+                    'message' => $msg->message,
+                    'sender_id' => $msg->sender_id,
+                    'sender_type' => $msg->sender_id === Auth::id() ? 'admin' : 'user',
+                    'created_at' => \Carbon\Carbon::parse($msg->created_at),
+                    'sender' => (object) ['name' => $msg->sender_name]
+                ];
             });
+            
+            $totalTime = microtime(true) - $startTime;
+            Log::info('getSelectedMessages took: ' . round($totalTime * 1000, 2) . 'ms');
+            
+            return $result;
+            
+        } catch (\Exception $e) {
+            Log::error('getSelectedMessages error: ' . $e->getMessage());
+            return collect();
+        }
     }
 
-    // Pilih conversation (buka modal)
+    // Select conversation
     public function selectConversation(int $conversationId)
     {
+        Log::info('Selecting conversation: ' . $conversationId);
+        
         $this->selectedConversationId = $conversationId;
         
-        // Mark messages as read (messages bukan dari admin current)
-        ChatMessage::where('conversation_id', $conversationId)
-            ->where('sender_id', '!=', Auth::id())
-            ->where('is_read', false)
-            ->update(['is_read' => true]);
+        // Mark messages as read dengan raw SQL
+        try {
+            $updated = DB::update("
+                UPDATE chat_messages 
+                SET is_read = 1, updated_at = NOW() 
+                WHERE conversation_id = ? 
+                AND sender_id != ? 
+                AND is_read = 0
+            ", [$conversationId, Auth::id()]);
             
+            Log::info('Marked ' . $updated . ' messages as read');
+            
+        } catch (\Exception $e) {
+            Log::error('Mark as read error: ' . $e->getMessage());
+        }
+        
         $this->message = '';
+        
+        // Clear cache karena unread count berubah
+        $this->conversationsCache = null;
     }
 
     // Close modal
@@ -81,53 +200,87 @@ class LiveChat extends Page
         $this->message = '';
     }
 
-    // Kirim message
+    // OPTIMIZED: Send message dengan raw SQL
     public function sendMessage()
     {
-        if (empty(trim($this->message)) || !$this->selectedConversationId) {
-            return;
-        }
-
-        $conversation = ChatConversation::find($this->selectedConversationId);
+        $startTime = microtime(true);
         
-        if (!$conversation) {
+        if (empty(trim($this->message)) || !$this->selectedConversationId) {
+            Log::warning('sendMessage failed: empty message or no conversation');
             return;
         }
 
-        // Simpan message (tanpa sender_type)
-        ChatMessage::create([
-            'conversation_id' => $this->selectedConversationId,
-            'sender_id' => Auth::id(),
-            'message' => trim($this->message),
-            'type' => 'text',
-            'is_read' => true, // Admin messages otomatis read
-        ]);
-
-        // Update conversation
-        $conversation->update([
-            'admin_id' => Auth::id(),
-            'last_message_at' => now(),
-            'status' => 'active',
-        ]);
-
-        // Clear message
-        $this->message = '';
+        try {
+            // Insert message dengan raw SQL - FAST!
+            $messageId = DB::table('chat_messages')->insertGetId([
+                'conversation_id' => $this->selectedConversationId,
+                'sender_id' => Auth::id(),
+                'message' => trim($this->message),
+                'type' => 'text',
+                'is_read' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            
+            // Update conversation dengan raw SQL
+            DB::update("
+                UPDATE chat_conversations 
+                SET admin_id = ?, last_message_at = NOW(), status = 'active', updated_at = NOW()
+                WHERE id = ?
+            ", [Auth::id(), $this->selectedConversationId]);
+            
+            $this->message = '';
+            
+            // Clear cache
+            $this->conversationsCache = null;
+            
+            $totalTime = microtime(true) - $startTime;
+            Log::info('sendMessage completed in: ' . round($totalTime * 1000, 2) . 'ms');
+            
+        } catch (\Exception $e) {
+            Log::error('sendMessage error: ' . $e->getMessage());
+        }
     }
 
-    // Assign conversation ke admin
+    // Assign conversation
     public function assignToMe(int $conversationId)
     {
-        ChatConversation::where('id', $conversationId)
-            ->update(['admin_id' => Auth::id()]);
+        try {
+            DB::update("
+                UPDATE chat_conversations 
+                SET admin_id = ?, updated_at = NOW() 
+                WHERE id = ?
+            ", [Auth::id(), $conversationId]);
+            
+            // Clear cache
+            $this->conversationsCache = null;
+            
+            Log::info('Assigned conversation ' . $conversationId . ' to admin ' . Auth::id());
+            
+        } catch (\Exception $e) {
+            Log::error('assignToMe error: ' . $e->getMessage());
+        }
     }
 
     // Close conversation
     public function closeConversation(int $conversationId)
     {
-        ChatConversation::where('id', $conversationId)
-            ->update(['status' => 'closed']);
+        try {
+            DB::update("
+                UPDATE chat_conversations 
+                SET status = 'closed', updated_at = NOW() 
+                WHERE id = ?
+            ", [$conversationId]);
             
-        // Close modal after closing conversation
-        $this->closeModal();
+            // Clear cache
+            $this->conversationsCache = null;
+            
+            $this->closeModal();
+            
+            Log::info('Closed conversation: ' . $conversationId);
+            
+        } catch (\Exception $e) {
+            Log::error('closeConversation error: ' . $e->getMessage());
+        }
     }
 }
