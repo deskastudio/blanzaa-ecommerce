@@ -14,6 +14,10 @@ use Livewire\Attributes\On;
 class LiveChat extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-ellipsis';
+
+    protected static ?string $navigationGroup = 'Service';
+
+    protected static ?int $navigationSort = 1;
     protected static ?string $navigationLabel = 'Live Chat';
     protected static string $view = 'filament.pages.live-chat';
     
@@ -28,6 +32,17 @@ class LiveChat extends Page
     private const CACHE_TTL = 5; // 5 seconds
     private const CACHE_KEY_CONVERSATIONS = 'admin_conversations_';
     private const CACHE_KEY_MESSAGES = 'conversation_messages_';
+
+    // Method untuk clear cache saat ada update conversation
+public function clearNavigationCache(): void
+{
+    $cacheKey = 'nav_chat_stats_' . Auth::id();
+    Cache::forget($cacheKey);
+    
+    // Clear badge cache juga
+    Cache::tags(['navigation', 'chat'])->flush();
+}
+
 
     public function mount(): void
     {
@@ -236,6 +251,7 @@ public function getActiveConversations()
         } finally {
             $this->isLoading = false;
         }
+         $this->clearNavigationCache();
     }
 
     // Close modal
@@ -310,6 +326,7 @@ public function getActiveConversations()
         } finally {
             $this->isLoading = false;
         }
+           $this->clearNavigationCache();
     }
 
     // Assign conversation dengan validasi
@@ -397,6 +414,94 @@ public function getActiveConversations()
             $this->dispatch('scroll-to-bottom');
         }
     }
+// Versi yang dioptimasi untuk LiveChat.php
+
+public static function getNavigationBadge(): ?string
+{
+    try {
+        $unreadCount = DB::table('chat_messages as m')
+            ->join('chat_conversations as c', 'c.id', 'm.conversation_id')
+            ->where('m.sender_id', '!=', Auth::id())
+            ->where('m.is_read', false)
+            ->whereIn('c.status', ['active', 'pending'])
+            // Tambah filter untuk conversation yang punya pesan
+            ->whereExists(function($query) {
+                $query->select(DB::raw(1))
+                      ->from('chat_messages as m2')
+                      ->whereColumn('m2.conversation_id', 'c.id');
+            })
+            ->count();
+        
+        return $unreadCount > 0 ? (string) $unreadCount : null;
+    } catch (\Exception $e) {
+        Log::error('Error getting navigation badge: ' . $e->getMessage());
+        return null;
+    }
+}
+
+public static function getNavigationBadgeColor(): ?string
+{
+    $unreadCount = static::getNavigationBadge();
+    
+    if (!$unreadCount) {
+        return null;
+    }
+    
+    $count = (int) $unreadCount;
+    
+    if ($count >= 10) {
+        return 'danger'; // Red untuk banyak pesan
+    } elseif ($count >= 5) {
+        return 'warning'; // Orange untuk sedang
+    } else {
+        return 'primary'; // Blue lebih baik dari green untuk visibility
+    }
+}
+
+public static function getNavigationLabel(): string
+{
+    $baseLabel = 'Live Chat';
+    
+    try {
+        // Cache dengan key yang lebih spesifik
+        $cacheKey = 'nav_chat_stats_' . Auth::id();
+        
+        $stats = Cache::remember($cacheKey, 30, function () { // 30 detik cache
+            $active = DB::table('chat_conversations')
+                ->where('status', 'active')
+                ->whereExists(function($query) {
+                    $query->select(DB::raw(1))
+                          ->from('chat_messages')
+                          ->whereColumn('chat_messages.conversation_id', 'chat_conversations.id');
+                })
+                ->count();
+                
+            $pending = DB::table('chat_conversations')
+                ->where('status', 'pending')
+                ->whereExists(function($query) {
+                    $query->select(DB::raw(1))
+                          ->from('chat_messages')
+                          ->whereColumn('chat_messages.conversation_id', 'chat_conversations.id');
+                })
+                ->count();
+                
+            return [
+                'active' => $active,
+                'pending' => $pending,
+            ];
+        });
+        
+        $totalActive = $stats['active'] + $stats['pending'];
+        
+        if ($totalActive > 0) {
+            return $baseLabel . " ({$totalActive})";
+        }
+    } catch (\Exception $e) {
+        Log::error('Error getting navigation label: ' . $e->getMessage());
+    }
+    
+    return $baseLabel;
+}
 
     // Get conversation statistics
     public function getConversationStats()
