@@ -97,6 +97,8 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/send', [ChatController::class, 'sendMessage'])->name('send');
         Route::get('/messages', [ChatController::class, 'getMessages'])->name('messages');
         Route::post('/mark-read', [ChatController::class, 'markAsRead'])->name('mark-read');
+        // TAMBAHAN: Route yang diperlukan widget
+        Route::get('/unread-count', [ChatController::class, 'getUnreadCount'])->name('unread-count');
         
         // Admin routes (access controlled in controller)
         Route::get('/admin/conversations', [ChatController::class, 'getConversationsForAdmin'])->name('admin.conversations');

@@ -38,9 +38,14 @@ public function clearNavigationCache(): void
 {
     $cacheKey = 'nav_chat_stats_' . Auth::id();
     Cache::forget($cacheKey);
+     $keysToForget = [
+        'nav_chat_stats_' . Auth::id(),
+        self::CACHE_KEY_CONVERSATIONS . Auth::id(),
+    ];
     
-    // Clear badge cache juga
-    Cache::tags(['navigation', 'chat'])->flush();
+    foreach ($keysToForget as $key) {
+        Cache::forget($key);
+    }
 }
 
 
@@ -49,9 +54,8 @@ public function clearNavigationCache(): void
         $this->selectedConversationId = null;
         $this->message = '';
     }
-
-    // Method pengganti untuk getActiveConversations() di LiveChat.php
-// Mengatasi duplikasi dengan mengambil conversation terbaru per user
+// Ganti method getActiveConversations() dengan versi simple & clean
+// Sekarang database sudah bersih, tidak perlu logic duplicate handling
 
 public function getActiveConversations()
 {
@@ -61,7 +65,7 @@ public function getActiveConversations()
         $startTime = microtime(true);
         
         try {
-            // Query dengan ROW_NUMBER untuk ambil conversation terbaru per user
+            // Query simple dan efficient - no duplicate handling needed
             $conversations = DB::select("
                 SELECT 
                     c.id,
@@ -73,29 +77,46 @@ public function getActiveConversations()
                     u.name as user_name,
                     u.email as user_email,
                     u.avatar as user_avatar,
-                    a.name as admin_name
-                FROM (
-                    SELECT 
-                        c.*,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY c.user_id 
-                            ORDER BY 
-                                CASE WHEN c.admin_id = ? THEN 0 ELSE 1 END,
-                                c.last_message_at DESC,
-                                c.id DESC
-                        ) as rn
-                    FROM chat_conversations c
-                    WHERE c.status IN ('active', 'pending')
-                    -- Hanya conversation yang punya pesan
-                    AND EXISTS (
-                        SELECT 1 
+                    a.name as admin_name,
+                    (
+                        SELECT COUNT(*) 
                         FROM chat_messages m 
-                        WHERE m.conversation_id = c.id
-                    )
-                ) c
-                INNER JOIN users u ON u.id = c.user_id
+                        WHERE m.conversation_id = c.id 
+                        AND m.sender_id != ? 
+                        AND m.is_read = 0
+                    ) as unread_count,
+                    (
+                        SELECT m2.message 
+                        FROM chat_messages m2 
+                        WHERE m2.conversation_id = c.id 
+                        ORDER BY m2.created_at DESC 
+                        LIMIT 1
+                    ) as last_message,
+                    (
+                        SELECT u2.name 
+                        FROM chat_messages m3 
+                        JOIN users u2 ON u2.id = m3.sender_id 
+                        WHERE m3.conversation_id = c.id 
+                        ORDER BY m3.created_at DESC 
+                        LIMIT 1
+                    ) as last_message_sender,
+                    (
+                        SELECT m4.created_at 
+                        FROM chat_messages m4 
+                        WHERE m4.conversation_id = c.id 
+                        ORDER BY m4.created_at DESC 
+                        LIMIT 1
+                    ) as last_message_time
+                FROM chat_conversations c
+                JOIN users u ON u.id = c.user_id
                 LEFT JOIN users a ON a.id = c.admin_id
-                WHERE c.rn = 1  -- Hanya ambil 1 conversation per user (yang terbaru/prioritas)
+                WHERE c.status IN ('active', 'pending')
+                -- Hanya conversation yang punya pesan (database sudah bersih)
+                AND EXISTS (
+                    SELECT 1 
+                    FROM chat_messages m 
+                    WHERE m.conversation_id = c.id
+                )
                 ORDER BY 
                     CASE WHEN c.admin_id = ? THEN 0 ELSE 1 END,
                     c.last_message_at DESC,
@@ -103,40 +124,19 @@ public function getActiveConversations()
                 LIMIT 50
             ", [Auth::id(), Auth::id()]);
             
-            Log::info('Conversations after deduplication: ' . count($conversations));
+            Log::info('Clean conversations found: ' . count($conversations));
             
             $result = collect($conversations)->map(function ($conv) {
-                // Get unread count
-                $unreadCount = DB::table('chat_messages')
-                    ->where('conversation_id', $conv->id)
-                    ->where('sender_id', '!=', Auth::id())
-                    ->where('is_read', false)
-                    ->count();
-                
-                // Get last message info
-                $lastMessage = DB::table('chat_messages')
-                    ->select('message', 'sender_id', 'created_at')
-                    ->where('conversation_id', $conv->id)
-                    ->orderBy('created_at', 'desc')
-                    ->first();
-                
-                $lastMessageSender = null;
-                if ($lastMessage) {
-                    $lastMessageSender = DB::table('users')
-                        ->where('id', $lastMessage->sender_id)
-                        ->value('name');
-                }
-                
                 return (object) [
                     'id' => $conv->id,
                     'status' => $conv->status,
                     'last_message_at' => $conv->last_message_at ? \Carbon\Carbon::parse($conv->last_message_at) : null,
                     'created_at' => \Carbon\Carbon::parse($conv->created_at),
                     'admin_id' => $conv->admin_id,
-                    'unread_count' => (int) $unreadCount,
-                    'last_message' => $lastMessage ? \Illuminate\Support\Str::limit($lastMessage->message, 100) : null,
-                    'last_message_sender' => $lastMessageSender,
-                    'last_message_time' => $lastMessage ? \Carbon\Carbon::parse($lastMessage->created_at) : null,
+                    'unread_count' => (int) $conv->unread_count,
+                    'last_message' => $conv->last_message ? \Illuminate\Support\Str::limit($conv->last_message, 100) : null,
+                    'last_message_sender' => $conv->last_message_sender,
+                    'last_message_time' => $conv->last_message_time ? \Carbon\Carbon::parse($conv->last_message_time) : null,
                     'is_assigned_to_me' => $conv->admin_id == Auth::id(),
                     'user' => (object) [
                         'id' => $conv->user_id,
@@ -152,7 +152,7 @@ public function getActiveConversations()
             $totalTime = microtime(true) - $startTime;
             Log::debug('getActiveConversations took: ' . round($totalTime * 1000, 2) . 'ms');
             
-            return $result->values(); // Reset array keys
+            return $result;
             
         } catch (\Exception $e) {
             Log::error('getActiveConversations error: ' . $e->getMessage(), [
@@ -162,7 +162,6 @@ public function getActiveConversations()
         }
     });
 }
-
     // OPTIMIZED: Get messages dengan pagination dan caching
     public function getSelectedMessages()
 {
@@ -223,36 +222,38 @@ public function getActiveConversations()
     }
 
     // Select conversation dengan optimasi
-    public function selectConversation(int $conversationId)
-    {
-        $this->isLoading = true;
+   public function selectConversation(int $conversationId)
+{
+    $this->isLoading = true;
+    
+    try {
+        $this->selectedConversationId = $conversationId;
         
-        try {
-            $this->selectedConversationId = $conversationId;
+        // Mark messages as read dengan batch update
+        DB::transaction(function () use ($conversationId) {
+            $updated = DB::update("
+                UPDATE chat_messages 
+                SET is_read = 1, updated_at = NOW() 
+                WHERE conversation_id = ? 
+                AND sender_id != ? 
+                AND is_read = 0
+            ", [$conversationId, Auth::id()]);
             
-            // Mark messages as read dengan batch update
-            DB::transaction(function () use ($conversationId) {
-                $updated = DB::update("
-                    UPDATE chat_messages 
-                    SET is_read = 1, updated_at = NOW() 
-                    WHERE conversation_id = ? 
-                    AND sender_id != ? 
-                    AND is_read = 0
-                ", [$conversationId, Auth::id()]);
-                
-                Log::info("Marked {$updated} messages as read for conversation {$conversationId}");
-            });
-            
-            $this->message = '';
-            $this->clearCache();
-            
-        } catch (\Exception $e) {
-            Log::error('selectConversation error: ' . $e->getMessage());
-        } finally {
-            $this->isLoading = false;
-        }
-         $this->clearNavigationCache();
+            Log::info("Marked {$updated} messages as read for conversation {$conversationId}");
+        });
+        
+        $this->message = '';
+        $this->clearCache();
+        
+        // PERBAIKAN: Pindah ke dalam try block
+        $this->clearNavigationCache();
+        
+    } catch (\Exception $e) {
+        Log::error('selectConversation error: ' . $e->getMessage());
+    } finally {
+        $this->isLoading = false;
     }
+}
 
     // Close modal
     public function closeModal()
@@ -263,71 +264,73 @@ public function getActiveConversations()
     }
 
     // OPTIMIZED: Send message dengan validasi dan error handling
-    public function sendMessage()
-    {
-        $this->isLoading = true;
+   public function sendMessage()
+{
+    $this->isLoading = true;
+    
+    try {
+        $message = trim($this->message);
         
-        try {
-            $message = trim($this->message);
-            
-            // Validasi
-            if (empty($message)) {
-                $this->addError('message', 'Message cannot be empty');
-                return;
-            }
-            
-            if (strlen($message) > 1000) {
-                $this->addError('message', 'Message too long (max 1000 characters)');
-                return;
-            }
-            
-            if (!$this->selectedConversationId) {
-                $this->addError('message', 'No conversation selected');
-                return;
-            }
-
-            DB::transaction(function () use ($message) {
-                // Insert message
-                $messageId = DB::table('chat_messages')->insertGetId([
-                    'conversation_id' => $this->selectedConversationId,
-                    'sender_id' => Auth::id(),
-                    'message' => $message,
-                    'type' => 'text',
-                    'is_read' => true,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-                
-                // Update conversation
-                DB::update("
-                    UPDATE chat_conversations 
-                    SET admin_id = ?, 
-                        last_message_at = NOW(), 
-                        status = CASE 
-                            WHEN status = 'pending' THEN 'active'
-                            ELSE status 
-                        END,
-                        updated_at = NOW()
-                    WHERE id = ?
-                ", [Auth::id(), $this->selectedConversationId]);
-                
-                Log::info("Message {$messageId} sent to conversation {$this->selectedConversationId}");
-            });
-            
-            $this->message = '';
-            $this->clearCache();
-            
-            // Broadcast event untuk real-time updates
-            $this->dispatch('message-sent', conversationId: $this->selectedConversationId);
-            
-        } catch (\Exception $e) {
-            Log::error('sendMessage error: ' . $e->getMessage());
-            $this->addError('message', 'Failed to send message. Please try again.');
-        } finally {
-            $this->isLoading = false;
+        // Validasi
+        if (empty($message)) {
+            $this->addError('message', 'Message cannot be empty');
+            return;
         }
-           $this->clearNavigationCache();
+        
+        if (strlen($message) > 1000) {
+            $this->addError('message', 'Message too long (max 1000 characters)');
+            return;
+        }
+        
+        if (!$this->selectedConversationId) {
+            $this->addError('message', 'No conversation selected');
+            return;
+        }
+
+        DB::transaction(function () use ($message) {
+            // Insert message
+            $messageId = DB::table('chat_messages')->insertGetId([
+                'conversation_id' => $this->selectedConversationId,
+                'sender_id' => Auth::id(),
+                'message' => $message,
+                'type' => 'text',
+                'is_read' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            
+            // Update conversation
+            DB::update("
+                UPDATE chat_conversations 
+                SET admin_id = ?, 
+                    last_message_at = NOW(), 
+                    status = CASE 
+                        WHEN status = 'pending' THEN 'active'
+                        ELSE status 
+                    END,
+                    updated_at = NOW()
+                WHERE id = ?
+            ", [Auth::id(), $this->selectedConversationId]);
+            
+            Log::info("Message {$messageId} sent to conversation {$this->selectedConversationId}");
+        });
+        
+        $this->message = '';
+        $this->clearCache();
+        
+        // PERBAIKAN: Pindah ke dalam try block
+        $this->clearNavigationCache();
+        
+        // Broadcast event untuk real-time updates
+        $this->dispatch('message-sent', conversationId: $this->selectedConversationId);
+        
+    } catch (\Exception $e) {
+        Log::error('sendMessage error: ' . $e->getMessage());
+        $this->addError('message', 'Failed to send message. Please try again.');
+    } finally {
+        $this->isLoading = false;
     }
+}
 
     // Assign conversation dengan validasi
     public function assignToMe(int $conversationId)

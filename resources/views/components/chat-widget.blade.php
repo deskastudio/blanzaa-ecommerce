@@ -51,7 +51,7 @@
 </div>
 
 <script>
-// FIXED Chat Widget - Prevent Duplicates
+// FIXED Chat Widget - Prevent Duplicates & Handle Auth
 const chat = {
     isOpen: false,
     conversationId: null,
@@ -68,6 +68,10 @@ const chat = {
             if (this.conversationId) {
                 this.startPolling();
             }
+        @else
+            // Hide widget if not authenticated
+            console.log('❌ User not authenticated - chat disabled');
+            document.getElementById('chat-widget').style.display = 'none';
         @endauth
     },
     
@@ -81,8 +85,16 @@ const chat = {
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                }
+                },
+                credentials: 'same-origin'
             });
+            
+            // PERBAIKAN: Check content type to avoid JSON parse error
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                console.error('❌ Response is not JSON, user might not be authenticated');
+                return;
+            }
             
             if (response.ok) {
                 const data = await response.json();
@@ -91,6 +103,8 @@ const chat = {
                 
                 // Load unread count immediately
                 await this.updateUnreadBadge();
+            } else {
+                console.error('❌ Conversation request failed:', response.status);
             }
         } catch (error) {
             console.error('❌ Conversation error:', error);
@@ -128,11 +142,18 @@ const chat = {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                 },
+                credentials: 'same-origin',
                 body: JSON.stringify({
                     conversation_id: this.conversationId,
                     message: message
                 })
             });
+            
+            // PERBAIKAN: Check content type
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Response is not JSON');
+            }
             
             if (response.ok) {
                 const data = await response.json();
@@ -177,13 +198,21 @@ const chat = {
         try {
             const afterId = this.hasLoadedInitial ? this.lastMessageId : 0;
             const response = await fetch(
-                `/chat/messages?conversation_id=${this.conversationId}&after_id=${afterId}`
+                `/chat/messages?conversation_id=${this.conversationId}&after_id=${afterId}`,
+                { credentials: 'same-origin' }
             );
+            
+            // PERBAIKAN: Check content type
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                console.error('❌ Messages response is not JSON');
+                return;
+            }
             
             if (response.ok) {
                 const data = await response.json();
                 
-                if (data.messages && data.messages.length > 0) {
+                if (data.success && data.messages && data.messages.length > 0) {
                     console.log(`📨 Loading ${data.messages.length} messages (after_id: ${afterId})`);
                     
                     let hasNewMessages = false;
@@ -245,7 +274,18 @@ const chat = {
         if (!this.conversationId) return;
         
         try {
-            const response = await fetch(`/chat/unread-count?conversation_id=${this.conversationId}`);
+            const response = await fetch(
+                `/chat/unread-count?conversation_id=${this.conversationId}`,
+                { credentials: 'same-origin' }
+            );
+            
+            // PERBAIKAN: Check content type untuk unread count
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                console.error('❌ Unread count response is not JSON');
+                return;
+            }
+            
             if (response.ok) {
                 const data = await response.json();
                 const badge = document.getElementById('unread-badge');
@@ -354,6 +394,7 @@ const chat = {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                 },
+                credentials: 'same-origin',
                 body: JSON.stringify({
                     conversation_id: this.conversationId
                 })
@@ -460,7 +501,6 @@ window.addEventListener('beforeunload', () => {
     chat.stopPolling();
 });
 </script>
-
 <style>
 #chat-box {
     animation: slideUp 0.2s ease-out;
