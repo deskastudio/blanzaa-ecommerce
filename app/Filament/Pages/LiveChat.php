@@ -35,8 +35,10 @@ class LiveChat extends Page
         $this->message = '';
     }
 
-    // OPTIMIZED: Get conversations dengan caching yang lebih baik
-    public function getActiveConversations()
+    // Method pengganti untuk getActiveConversations() di LiveChat.php
+// Mengatasi duplikasi dengan mengambil conversation terbaru per user
+
+public function getActiveConversations()
 {
     $cacheKey = self::CACHE_KEY_CONVERSATIONS . Auth::id();
     
@@ -44,7 +46,7 @@ class LiveChat extends Page
         $startTime = microtime(true);
         
         try {
-            // Query tanpa FORCE INDEX
+            // Query dengan ROW_NUMBER untuk ambil conversation terbaru per user
             $conversations = DB::select("
                 SELECT 
                     c.id,
@@ -56,59 +58,70 @@ class LiveChat extends Page
                     u.name as user_name,
                     u.email as user_email,
                     u.avatar as user_avatar,
-                    a.name as admin_name,
-                    (
-                        SELECT COUNT(*) 
+                    a.name as admin_name
+                FROM (
+                    SELECT 
+                        c.*,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY c.user_id 
+                            ORDER BY 
+                                CASE WHEN c.admin_id = ? THEN 0 ELSE 1 END,
+                                c.last_message_at DESC,
+                                c.id DESC
+                        ) as rn
+                    FROM chat_conversations c
+                    WHERE c.status IN ('active', 'pending')
+                    -- Hanya conversation yang punya pesan
+                    AND EXISTS (
+                        SELECT 1 
                         FROM chat_messages m 
-                        WHERE m.conversation_id = c.id 
-                        AND m.sender_id != ? 
-                        AND m.is_read = 0
-                    ) as unread_count,
-                    (
-                        SELECT m2.message 
-                        FROM chat_messages m2 
-                        WHERE m2.conversation_id = c.id 
-                        ORDER BY m2.created_at DESC 
-                        LIMIT 1
-                    ) as last_message,
-                    (
-                        SELECT u2.name 
-                        FROM chat_messages m3 
-                        JOIN users u2 ON u2.id = m3.sender_id 
-                        WHERE m3.conversation_id = c.id 
-                        ORDER BY m3.created_at DESC 
-                        LIMIT 1
-                    ) as last_message_sender,
-                    (
-                        SELECT m4.created_at 
-                        FROM chat_messages m4 
-                        WHERE m4.conversation_id = c.id 
-                        ORDER BY m4.created_at DESC 
-                        LIMIT 1
-                    ) as last_message_time
-                FROM chat_conversations c
-                JOIN users u ON u.id = c.user_id
+                        WHERE m.conversation_id = c.id
+                    )
+                ) c
+                INNER JOIN users u ON u.id = c.user_id
                 LEFT JOIN users a ON a.id = c.admin_id
-                WHERE c.status IN ('active', 'pending')
+                WHERE c.rn = 1  -- Hanya ambil 1 conversation per user (yang terbaru/prioritas)
                 ORDER BY 
                     CASE WHEN c.admin_id = ? THEN 0 ELSE 1 END,
-                    c.last_message_at DESC
+                    c.last_message_at DESC,
+                    c.id DESC
                 LIMIT 50
             ", [Auth::id(), Auth::id()]);
             
-            Log::info('Raw conversations count: ' . count($conversations)); // Debug log
+            Log::info('Conversations after deduplication: ' . count($conversations));
             
             $result = collect($conversations)->map(function ($conv) {
+                // Get unread count
+                $unreadCount = DB::table('chat_messages')
+                    ->where('conversation_id', $conv->id)
+                    ->where('sender_id', '!=', Auth::id())
+                    ->where('is_read', false)
+                    ->count();
+                
+                // Get last message info
+                $lastMessage = DB::table('chat_messages')
+                    ->select('message', 'sender_id', 'created_at')
+                    ->where('conversation_id', $conv->id)
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+                
+                $lastMessageSender = null;
+                if ($lastMessage) {
+                    $lastMessageSender = DB::table('users')
+                        ->where('id', $lastMessage->sender_id)
+                        ->value('name');
+                }
+                
                 return (object) [
                     'id' => $conv->id,
                     'status' => $conv->status,
                     'last_message_at' => $conv->last_message_at ? \Carbon\Carbon::parse($conv->last_message_at) : null,
                     'created_at' => \Carbon\Carbon::parse($conv->created_at),
                     'admin_id' => $conv->admin_id,
-                    'unread_count' => (int) $conv->unread_count,
-                    'last_message' => $conv->last_message ? \Illuminate\Support\Str::limit($conv->last_message, 100) : null,
-                    'last_message_sender' => $conv->last_message_sender,
-                    'last_message_time' => $conv->last_message_time ? \Carbon\Carbon::parse($conv->last_message_time) : null,
+                    'unread_count' => (int) $unreadCount,
+                    'last_message' => $lastMessage ? \Illuminate\Support\Str::limit($lastMessage->message, 100) : null,
+                    'last_message_sender' => $lastMessageSender,
+                    'last_message_time' => $lastMessage ? \Carbon\Carbon::parse($lastMessage->created_at) : null,
                     'is_assigned_to_me' => $conv->admin_id == Auth::id(),
                     'user' => (object) [
                         'id' => $conv->user_id,
@@ -124,7 +137,7 @@ class LiveChat extends Page
             $totalTime = microtime(true) - $startTime;
             Log::debug('getActiveConversations took: ' . round($totalTime * 1000, 2) . 'ms');
             
-            return $result;
+            return $result->values(); // Reset array keys
             
         } catch (\Exception $e) {
             Log::error('getActiveConversations error: ' . $e->getMessage(), [

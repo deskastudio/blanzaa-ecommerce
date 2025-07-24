@@ -1,12 +1,42 @@
-{{-- Conversations List Component --}}
+{{-- Conversations List Component - Clean Version --}}
 {{-- File: resources/views/filament/pages/live-chat/conversations-list.blade.php --}}
 
-<div style="background: white; border-radius: 0 0 8px 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-height: 600px; overflow-y: auto;" data-conversations-count="{{ $this->getActiveConversations()->count() }}">
-    @forelse($this->getActiveConversations() as $conversation)
+@php
+    $conversations = $this->getActiveConversations();
+    $conversationCount = $conversations->count();
+@endphp
+
+<div style="
+    background: white; 
+    border-radius: 0 0 8px 8px; 
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+    max-height: 500px; 
+    overflow-y: auto; 
+    position: relative;
+" 
+data-conversations-count="{{ $conversationCount }}">
+
+    @forelse($conversations as $conversation)
         @include('filament.pages.live-chat.conversation-item', ['conversation' => $conversation])
     @empty
         @include('filament.pages.live-chat.empty-state')
     @endforelse
+    
+    {{-- Clean footer info --}}
+    @if($conversationCount > 0)
+        <div style="
+            padding: 8px 16px; 
+            background: #f8fafc; 
+            border-top: 1px solid #e5e7eb; 
+            font-size: 11px; 
+            color: #6b7280; 
+            text-align: center;
+            position: sticky;
+            bottom: 0;
+        ">
+            {{ $conversationCount }} active conversation{{ $conversationCount !== 1 ? 's' : '' }}
+        </div>
+    @endif
 </div>
 
 <style>
@@ -26,5 +56,10 @@
 
     div[data-conversations-count]::-webkit-scrollbar-thumb:hover {
         background: #94a3b8;
+    }
+
+    /* Smooth scrolling */
+    div[data-conversations-count] {
+        scroll-behavior: smooth;
     }
 </style>
