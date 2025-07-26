@@ -11,6 +11,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\ChatController;  // ADD THIS IMPORT
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Log;
 
 // Authentication Routes
 Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
@@ -112,6 +113,7 @@ Route::prefix('api')->name('api.')->group(function () {
         Route::get('/orders/{order}/payment-status', [OrderController::class, 'paymentStatus'])->name('orders.payment-status');
     });
 });
+    
 
 // Fallback route
 Route::fallback(function () {
