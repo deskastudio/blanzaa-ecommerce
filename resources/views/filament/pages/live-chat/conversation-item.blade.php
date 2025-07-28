@@ -72,73 +72,9 @@
                 </div>
             </div>
             
-            <!-- Row 2: Email -->
-            <div style="margin: 2px 0;">
-                <p style="
-                    font-size: 12px; 
-                    color: #6b7280; 
-                    margin: 0; 
-                    white-space: nowrap; 
-                    overflow: hidden; 
-                    text-overflow: ellipsis;
-                ">
-                    {{ $conversation->user->email }}
-                </p>
-            </div>
+           
             
-            <!-- Row 3: Status Badges -->
-            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 2px 0;">
-                {{-- Assignment Badge --}}
-                @if($conversation->is_assigned_to_me)
-                    <span style="
-                        padding: 2px 8px; 
-                        background: #dbeafe; 
-                        color: #1e40af; 
-                        border-radius: 12px; 
-                        font-size: 10px; 
-                        white-space: nowrap;
-                        font-weight: 500;
-                    ">
-                        ✓ Assigned to you
-                    </span>
-                @elseif($conversation->admin)
-                    <span style="
-                        padding: 2px 8px; 
-                        background: #e5e7eb; 
-                        color: #374151; 
-                        border-radius: 12px; 
-                        font-size: 10px; 
-                        white-space: nowrap;
-                        font-weight: 500;
-                    ">
-                        ✓ {{ $conversation->admin->name }}
-                    </span>
-                @else
-                    <span style="
-                        padding: 2px 8px; 
-                        background: #fef3c7; 
-                        color: #92400e; 
-                        border-radius: 12px; 
-                        font-size: 10px; 
-                        white-space: nowrap;
-                        font-weight: 500;
-                    ">
-                        ⚠ Unassigned
-                    </span>
-                @endif
-
-                {{-- Status Badge --}}
-                <span style="
-                    padding: 2px 8px; 
-                    border-radius: 12px; 
-                    font-size: 10px; 
-                    white-space: nowrap;
-                    font-weight: 500;
-                    {{ $conversation->status === 'active' ? 'background: #d1fae5; color: #065f46;' : 'background: #fef3c7; color: #92400e;' }}
-                ">
-                    {{ ucfirst($conversation->status) }}
-                </span>
-            </div>
+          
             
             <!-- Row 4: Last Message -->
             @if($conversation->last_message)

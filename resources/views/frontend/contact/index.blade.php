@@ -78,7 +78,7 @@
                         class="w-full bg-red-500 text-white py-3 px-6 rounded-lg hover:bg-red-600 transition-colors font-medium">
                     <span id="submitText">Send Message</span>
                     <span id="submitLoading" class="hidden">
-                        <i class="fas fa-spinner fa-spin mr-2"></i>Sending...
+                       Sending...
                     </span>
                 </button>
             </form>

@@ -36,16 +36,22 @@ class LiveChat extends Page
     // Method untuk clear cache saat ada update conversation
 public function clearNavigationCache(): void
 {
-    $cacheKey = 'nav_chat_stats_' . Auth::id();
-    Cache::forget($cacheKey);
-     $keysToForget = [
-        'nav_chat_stats_' . Auth::id(),
-        self::CACHE_KEY_CONVERSATIONS . Auth::id(),
+    $userId = Auth::id();
+    
+    $keysToForget = [
+        'nav_chat_stats_' . $userId,
+        'nav_chat_stats_' . $userId . '_label',
+        'admin_chat_stats_' . $userId,
+        'admin_conversations_' . $userId,
+        self::CACHE_KEY_CONVERSATIONS . $userId,
     ];
     
     foreach ($keysToForget as $key) {
         Cache::forget($key);
+        Log::debug("🗑️ Navigation cache cleared: {$key}");
     }
+    
+    Log::info("🔄 All navigation caches cleared for user {$userId}");
 }
 
 
@@ -221,8 +227,10 @@ public function getActiveConversations()
         return strtoupper(substr($name, 0, 2));
     }
 
-    // Select conversation dengan optimasi
-   public function selectConversation(int $conversationId)
+// FIXED: Force sidebar refresh after reading messages
+// File: app/Filament/Pages/LiveChat.php
+
+public function selectConversation(int $conversationId)
 {
     $this->isLoading = true;
     
@@ -243,10 +251,11 @@ public function getActiveConversations()
         });
         
         $this->message = '';
-        $this->clearCache();
         
-        // PERBAIKAN: Pindah ke dalam try block
-        $this->clearNavigationCache();
+        // CRITICAL: Force sidebar refresh
+        $this->forceSidebarRefresh();
+        
+        Log::info("✅ Conversation {$conversationId} selected and sidebar refreshed");
         
     } catch (\Exception $e) {
         Log::error('selectConversation error: ' . $e->getMessage());
@@ -255,6 +264,39 @@ public function getActiveConversations()
     }
 }
 
+private function forceSidebarRefresh(): void
+{
+    $userId = Auth::id();
+    
+    // 1. Clear ALL related cache keys
+    $cacheKeys = [
+        'nav_chat_stats_' . $userId,
+        'nav_chat_stats_' . $userId . '_label',
+        'admin_chat_stats_' . $userId,
+        'admin_conversations_' . $userId,
+        self::CACHE_KEY_CONVERSATIONS . $userId,
+    ];
+    
+    foreach ($cacheKeys as $key) {
+        Cache::forget($key);
+    }
+    
+    // 2. Force regenerate navigation badge cache
+    try {
+        // Call static method to regenerate cache
+        $newBadgeCount = static::getNavigationBadge();
+        Log::info("🔄 Sidebar badge refreshed: " . ($newBadgeCount ?? 'null'));
+        
+        // 3. Dispatch browser refresh event (if needed)
+        $this->dispatch('navigation-updated', [
+            'badge_count' => $newBadgeCount,
+            'timestamp' => now()->timestamp
+        ]);
+        
+    } catch (\Exception $e) {
+        Log::error("❌ Failed to refresh sidebar: " . $e->getMessage());
+    }
+}
     // Close modal
     public function closeModal()
     {
@@ -264,14 +306,13 @@ public function getActiveConversations()
     }
 
     // OPTIMIZED: Send message dengan validasi dan error handling
-   public function sendMessage()
+  public function sendMessage()
 {
     $this->isLoading = true;
     
     try {
         $message = trim($this->message);
         
-        // Validasi
         if (empty($message)) {
             $this->addError('message', 'Message cannot be empty');
             return;
@@ -288,7 +329,6 @@ public function getActiveConversations()
         }
 
         DB::transaction(function () use ($message) {
-            // Insert message
             $messageId = DB::table('chat_messages')->insertGetId([
                 'conversation_id' => $this->selectedConversationId,
                 'sender_id' => Auth::id(),
@@ -299,7 +339,6 @@ public function getActiveConversations()
                 'updated_at' => now(),
             ]);
             
-            // Update conversation
             DB::update("
                 UPDATE chat_conversations 
                 SET admin_id = ?, 
@@ -316,12 +355,10 @@ public function getActiveConversations()
         });
         
         $this->message = '';
-        $this->clearCache();
         
-        // PERBAIKAN: Pindah ke dalam try block
-        $this->clearNavigationCache();
+        // CRITICAL: Force sidebar refresh after sending message too
+        $this->forceSidebarRefresh();
         
-        // Broadcast event untuk real-time updates
         $this->dispatch('message-sent', conversationId: $this->selectedConversationId);
         
     } catch (\Exception $e) {
@@ -329,6 +366,33 @@ public function getActiveConversations()
         $this->addError('message', 'Failed to send message. Please try again.');
     } finally {
         $this->isLoading = false;
+    }
+}
+
+private function forceNavigationCacheRefresh(): void
+{
+    $userId = Auth::id();
+    
+    // Clear multiple cache variations to ensure complete refresh
+    $cacheKeys = [
+        'nav_chat_stats_' . $userId,
+        'admin_chat_stats_' . $userId,
+        'admin_conversations_' . $userId,
+        self::CACHE_KEY_CONVERSATIONS . $userId,
+    ];
+    
+    foreach ($cacheKeys as $key) {
+        Cache::forget($key);
+        Log::debug("🗑️ Cleared cache key: {$key}");
+    }
+    
+    // Force refresh navigation badge by calling it once
+    // This will regenerate the cache with fresh data
+    try {
+        $this->getNavigationBadge();
+        Log::info("🔄 Navigation badge cache refreshed");
+    } catch (\Exception $e) {
+        Log::error("❌ Failed to refresh navigation badge: " . $e->getMessage());
     }
 }
 
@@ -422,12 +486,15 @@ public function getActiveConversations()
 public static function getNavigationBadge(): ?string
 {
     try {
+        $userId = Auth::id();
+        if (!$userId) return null;
+        
+        // NO CACHE - Direct query for immediate update
         $unreadCount = DB::table('chat_messages as m')
             ->join('chat_conversations as c', 'c.id', 'm.conversation_id')
-            ->where('m.sender_id', '!=', Auth::id())
+            ->where('m.sender_id', '!=', $userId)
             ->where('m.is_read', false)
             ->whereIn('c.status', ['active', 'pending'])
-            // Tambah filter untuk conversation yang punya pesan
             ->whereExists(function($query) {
                 $query->select(DB::raw(1))
                       ->from('chat_messages as m2')
@@ -435,7 +502,10 @@ public static function getNavigationBadge(): ?string
             })
             ->count();
         
+        Log::debug("📊 Navigation badge count (real-time): {$unreadCount} for user {$userId}");
+        
         return $unreadCount > 0 ? (string) $unreadCount : null;
+        
     } catch (\Exception $e) {
         Log::error('Error getting navigation badge: ' . $e->getMessage());
         return null;
@@ -466,39 +536,34 @@ public static function getNavigationLabel(): string
     $baseLabel = 'Live Chat';
     
     try {
-        // Cache dengan key yang lebih spesifik
-        $cacheKey = 'nav_chat_stats_' . Auth::id();
+        $userId = Auth::id();
+        if (!$userId) return $baseLabel;
         
-        $stats = Cache::remember($cacheKey, 30, function () { // 30 detik cache
-            $active = DB::table('chat_conversations')
-                ->where('status', 'active')
-                ->whereExists(function($query) {
-                    $query->select(DB::raw(1))
-                          ->from('chat_messages')
-                          ->whereColumn('chat_messages.conversation_id', 'chat_conversations.id');
-                })
-                ->count();
-                
-            $pending = DB::table('chat_conversations')
-                ->where('status', 'pending')
-                ->whereExists(function($query) {
-                    $query->select(DB::raw(1))
-                          ->from('chat_messages')
-                          ->whereColumn('chat_messages.conversation_id', 'chat_conversations.id');
-                })
-                ->count();
-                
-            return [
-                'active' => $active,
-                'pending' => $pending,
-            ];
-        });
+        // NO CACHE - Direct query for immediate update
+        $active = DB::table('chat_conversations')
+            ->where('status', 'active')
+            ->whereExists(function($query) {
+                $query->select(DB::raw(1))
+                      ->from('chat_messages')
+                      ->whereColumn('chat_messages.conversation_id', 'chat_conversations.id');
+            })
+            ->count();
+            
+        $pending = DB::table('chat_conversations')
+            ->where('status', 'pending')
+            ->whereExists(function($query) {
+                $query->select(DB::raw(1))
+                      ->from('chat_messages')
+                      ->whereColumn('chat_messages.conversation_id', 'chat_conversations.id');
+            })
+            ->count();
         
-        $totalActive = $stats['active'] + $stats['pending'];
+        $totalActive = $active + $pending;
         
         if ($totalActive > 0) {
             return $baseLabel . " ({$totalActive})";
         }
+        
     } catch (\Exception $e) {
         Log::error('Error getting navigation label: ' . $e->getMessage());
     }

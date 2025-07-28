@@ -26,10 +26,10 @@ data-conversations-count="{{ $conversationCount }}">
     @if($conversationCount > 0)
         <div style="
             padding: 8px 16px; 
-            background: #f8fafc; 
+            background:  linear-gradient(90deg, #3b82f6, #1d4ed8); 
             border-top: 1px solid #e5e7eb; 
             font-size: 11px; 
-            color: #6b7280; 
+            color: #fff; 
             text-align: center;
             position: sticky;
             bottom: 0;

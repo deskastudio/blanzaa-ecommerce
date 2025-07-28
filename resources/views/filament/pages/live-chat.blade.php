@@ -1,9 +1,7 @@
 <x-filament-panels::page>
     <!-- Main Page Layout -->
     <div wire:poll.3s>
-        <!-- Statistics Component -->
-        @include('filament.pages.live-chat.statistics')
-        
+    
         <!-- Header Component -->
         @include('filament.pages.live-chat.header')
         
