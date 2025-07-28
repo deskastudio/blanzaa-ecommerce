@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class OrderController extends Controller
 {
@@ -278,9 +279,9 @@ class OrderController extends Controller
     public function uploadPayment(Request $request, Order $order)
 {
     // Log untuk debugging
-    \Log::info('Payment upload attempt', [
-        'order_id' => $order->id,
-        'user_id' => auth()->id()
+    Log::info('Payment upload attempt', [
+        'order_id' => $order->order_number ?? $order->id ?? null,
+        'user_id' => Auth::id()
     ]);
 
     // Ensure user can only upload payment for their own orders
@@ -327,8 +328,8 @@ class OrderController extends Controller
 
     try {
         // Delete old payment proof if exists
-        if ($order->payment_proof && \Storage::disk('public')->exists($order->payment_proof)) {
-            \Storage::disk('public')->delete($order->payment_proof);
+        if ($order->payment_proof && \Illuminate\Support\Facades\Storage::disk('public')->exists($order->payment_proof)) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($order->payment_proof);
         }
 
         // Store the new payment proof
@@ -353,10 +354,10 @@ class OrderController extends Controller
 
         $order->update($updateData);
 
-        \Log::info('Payment proof uploaded successfully', [
+        Log::info('Payment proof uploaded successfully', [
             'order_id' => $order->id,
             'file_path' => $path,
-            'user_id' => auth()->id()
+            'user_id' => auth()->id(),
         ]);
 
         return response()->json([
@@ -368,7 +369,7 @@ class OrderController extends Controller
         ]);
 
     } catch (\Exception $e) {
-        \Log::error('Payment proof upload failed', [
+        \Illuminate\Support\Facades\Log::error('Payment proof upload failed', [
             'order_id' => $order->id,
             'user_id' => auth()->id(),
             'error' => $e->getMessage()

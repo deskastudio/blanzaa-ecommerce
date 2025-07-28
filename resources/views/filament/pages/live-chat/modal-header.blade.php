@@ -22,13 +22,7 @@
             </button>
         @endif
         
-        <button wire:click="closeConversation({{ $selectedConversationId }})"
-                onclick="return confirm('Close this conversation?')"
-                style="padding: 6px 12px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; transition: background-color 0.2s ease;"
-                onmouseover="this.style.background='#dc2626'"
-                onmouseout="this.style.background='#ef4444'">
-                Close
-        </button>
+        {{-- BUTTON CLOSE DIHAPUS --}}
         
         <button wire:click="closeModal" 
                 style="padding: 8px; background: none; border: none; color: white; cursor: pointer; font-size: 18px; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s ease;"
