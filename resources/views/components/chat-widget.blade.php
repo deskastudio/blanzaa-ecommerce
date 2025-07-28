@@ -1,5 +1,5 @@
 {{-- File: resources/views/components/chat-widget.blade.php --}}
-{{-- Final Alpine.js Chat Widget - Complete & Fixed --}}
+{{-- FIXED Alpine.js Chat Widget - Single System --}}
 
 <div id="chat-widget" 
      x-data="chatWidget()" 
@@ -78,8 +78,8 @@
                 </div>
             </div>
             
-            {{-- Messages List --}}
-            <template x-for="message in messages" :key="message.id">
+            {{-- Messages List - FIXED KEY ISSUE --}}
+            <template x-for="(message, index) in messages" :key="`msg-${message.id || index}-${message.created_at || Date.now()}`">
                 <div class="message-wrapper mb-3" 
                      :class="message.is_from_admin ? 'admin-message' : 'user-message'">
                     
@@ -94,9 +94,9 @@
                                 </div>
                                 <div class="flex-1">
                                     <div class="bg-white border border-gray-200 px-4 py-2 rounded-lg rounded-bl-sm shadow-sm">
-                                        <div x-text="message.sender_name" class="text-xs text-gray-500 mb-1"></div>
-                                        <p x-text="message.message" class="text-sm text-gray-800"></p>
-                                        <div x-text="message.formatted_time" class="text-xs text-gray-500 mt-1"></div>
+                                        <div x-text="message.sender_name || 'Support'" class="text-xs text-gray-500 mb-1"></div>
+                                        <p x-text="message.message || ''" class="text-sm text-gray-800"></p>
+                                        <div x-text="message.formatted_time || ''" class="text-xs text-gray-500 mt-1"></div>
                                     </div>
                                 </div>
                             </div>
@@ -107,10 +107,13 @@
                     <div x-show="!message.is_from_admin" class="flex justify-end">
                         <div class="max-w-xs">
                             <div class="bg-blue-500 text-white px-4 py-2 rounded-lg rounded-br-sm shadow-sm">
-                                <p x-text="message.message" class="text-sm"></p>
+                                <p x-text="message.message || ''" class="text-sm"></p>
                                 <div class="flex justify-between items-center mt-1 text-xs text-blue-100">
-                                    <span x-text="message.formatted_time"></span>
-                                    <span class="message-status">✓</span>
+                                    <span x-text="message.formatted_time || ''"></span>
+                                    <span class="message-status">
+                                        <span x-show="message.temp">⏳</span>
+                                        <span x-show="!message.temp">✓</span>
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -152,7 +155,15 @@
                     <button type="submit" 
                             :disabled="!messageText.trim() || isSending"
                             class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-all duration-200 flex items-center justify-center min-w-[44px] disabled:opacity-50 disabled:cursor-not-allowed">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {{-- Loading State --}}
+                        <div x-show="isSending" class="flex items-center space-x-1">
+                            <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                        {{-- Normal State --}}
+                        <svg x-show="!isSending" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
                         </svg>
                     </button>
@@ -186,29 +197,42 @@ function chatWidget() {
         lastMessageId: 0,
         polling: null,
         
-        // Initialize
+        // Initialize - FIXED ASYNC HANDLING
         async init() {
             console.log('🚀 Alpine Chat Widget initializing...');
             
-            // Check authentication
-            const authMeta = document.querySelector('meta[name="user-authenticated"]');
-            this.isAuthenticated = authMeta && authMeta.content === 'true';
-            
-            if (!this.isAuthenticated) {
-                console.log('❌ User not authenticated');
-                return;
+            try {
+                // Check authentication
+                const authMeta = document.querySelector('meta[name="user-authenticated"]');
+                this.isAuthenticated = authMeta && authMeta.content === 'true';
+                
+                console.log('🔐 Authentication check:', this.isAuthenticated);
+                
+                if (!this.isAuthenticated) {
+                    console.log('❌ User not authenticated');
+                    return;
+                }
+                
+                // Load conversation with error handling
+                await this.loadConversation();
+                
+                // Start polling only if conversation loaded
+                if (this.conversationId) {
+                    this.startPolling();
+                    console.log('✅ Alpine Chat Widget ready!');
+                } else {
+                    console.log('⚠️ No conversation loaded, retrying...');
+                    // Retry after 2 seconds
+                    setTimeout(() => this.loadConversation(), 2000);
+                }
+                
+            } catch (error) {
+                console.error('❌ Init error:', error);
+                this.connectionStatus = 'Initialization Error';
             }
-            
-            // Load conversation
-            await this.loadConversation();
-            
-            // Start polling
-            this.startPolling();
-            
-            console.log('✅ Alpine Chat Widget ready!');
         },
         
-        // Load conversation and messages
+        // Load conversation - IMPROVED ERROR HANDLING
         async loadConversation() {
             if (this.isLoading) return;
             this.isLoading = true;
@@ -225,38 +249,61 @@ function chatWidget() {
                     }
                 });
                 
+                console.log('📡 Response status:', response.status);
+                
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
                 const data = await response.json();
+                console.log('📄 Response data:', data);
                 
                 if (data.success) {
                     this.conversationId = data.conversation_id;
-                    this.messages = data.messages || [];
+                    
+                    // SAFE MESSAGE ASSIGNMENT - Ensure unique IDs
+                    this.messages = (data.messages || []).map((msg, index) => ({
+                        ...msg,
+                        id: msg.id || `fallback-${index}-${Date.now()}`,
+                        message: msg.message || '',
+                        sender_name: msg.sender_name || (msg.is_from_admin ? 'Support' : 'You'),
+                        formatted_time: msg.formatted_time || this.formatTime(msg.created_at),
+                        is_from_admin: !!msg.is_from_admin
+                    }));
+                    
                     this.unreadCount = data.unread_count || 0;
                     this.connectionStatus = 'Online';
                     
                     if (this.messages.length > 0) {
-                        this.lastMessageId = Math.max(...this.messages.map(m => m.id));
+                        const validIds = this.messages.filter(m => typeof m.id === 'number').map(m => m.id);
+                        this.lastMessageId = validIds.length > 0 ? Math.max(...validIds) : 0;
                     }
                     
-                    console.log('✅ Conversation loaded:', this.conversationId);
+                    console.log('✅ Conversation loaded:', this.conversationId, 'Messages:', this.messages.length);
                     
                     // Auto scroll
                     this.$nextTick(() => this.scrollToBottom());
                 } else {
-                    throw new Error('Failed to load conversation');
+                    throw new Error(data.message || 'Failed to load conversation');
                 }
             } catch (error) {
                 console.error('❌ Load error:', error);
                 this.connectionStatus = 'Connection Error';
+                
+                // Show user-friendly error
+                if (error.message.includes('401') || error.message.includes('authentication')) {
+                    this.connectionStatus = 'Authentication Error';
+                } else if (error.message.includes('403')) {
+                    this.connectionStatus = 'Access Denied';
+                } else {
+                    this.connectionStatus = 'Connection Error';
+                }
             } finally {
                 this.isLoading = false;
             }
         },
         
-        // Send message (RENAMED TO AVOID CONFLICT)
+        // Send message - IMPROVED ERROR HANDLING
         async sendChatMessage() {
             const message = this.messageText.trim();
             if (!message || this.isSending || !this.conversationId) return;
@@ -264,14 +311,16 @@ function chatWidget() {
             console.log('📤 Sending message:', message);
             this.isSending = true;
             
-            // Add optimistic message
+            // Add optimistic message with GUARANTEED UNIQUE ID
+            const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
             const tempMessage = {
-                id: 'temp_' + Date.now(),
+                id: tempId,
                 message: message,
                 sender_name: 'You',
                 is_from_admin: false,
                 formatted_time: 'Sending...',
-                temp: true
+                temp: true,
+                created_at: new Date().toISOString()
             };
             
             this.messages.push(tempMessage);
@@ -293,33 +342,44 @@ function chatWidget() {
                     })
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
                 
-                if (data.success) {
+                if (data.success && data.data) {
                     // Remove temp message and add real one
-                    this.messages = this.messages.filter(m => m.id !== tempMessage.id);
-                    this.messages.push(data.data);
-                    this.lastMessageId = Math.max(this.lastMessageId, data.data.id);
+                    this.messages = this.messages.filter(m => m.id !== tempId);
+                    
+                    const realMessage = {
+                        ...data.data,
+                        id: data.data.id || `real-${Date.now()}`,
+                        formatted_time: data.data.formatted_time || this.formatTime(data.data.created_at)
+                    };
+                    
+                    this.messages.push(realMessage);
+                    this.lastMessageId = Math.max(this.lastMessageId, realMessage.id);
                     
                     console.log('✅ Message sent successfully');
                 } else {
-                    throw new Error('Send failed');
+                    throw new Error(data.message || 'Send failed');
                 }
             } catch (error) {
                 console.error('❌ Send error:', error);
                 
                 // Remove failed message and restore text
-                this.messages = this.messages.filter(m => m.id !== tempMessage.id);
+                this.messages = this.messages.filter(m => m.id !== tempId);
                 this.messageText = message;
                 
                 alert('Failed to send message. Please try again.');
             } finally {
                 this.isSending = false;
-                this.$refs.messageInput.focus();
+                this.$refs.messageInput?.focus();
             }
         },
         
-        // Polling for new messages (REDUCED FREQUENCY)
+        // Polling - IMPROVED STABILITY
         async pollMessages() {
             if (!this.conversationId || this.isLoading) return;
             
@@ -327,18 +387,36 @@ function chatWidget() {
                 const response = await fetch(
                     `/chat/messages?conversation_id=${this.conversationId}&after_id=${this.lastMessageId}`,
                     {
-                        signal: AbortSignal.timeout(10000) // 10s timeout for polling
+                        signal: AbortSignal.timeout(10000)
                     }
                 );
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
                 const data = await response.json();
                 
-                if (data.success && data.messages && data.messages.length > 0) {
+                if (data.success && data.messages && Array.isArray(data.messages) && data.messages.length > 0) {
                     console.log(`📨 Got ${data.messages.length} new messages`);
                     
                     data.messages.forEach(message => {
-                        this.messages.push(message);
-                        this.lastMessageId = Math.max(this.lastMessageId, message.id);
+                        // Ensure unique ID and required fields
+                        const processedMessage = {
+                            ...message,
+                            id: message.id || `poll-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                            message: message.message || '',
+                            sender_name: message.sender_name || (message.is_from_admin ? 'Support' : 'User'),
+                            formatted_time: message.formatted_time || this.formatTime(message.created_at),
+                            is_from_admin: !!message.is_from_admin
+                        };
+                        
+                        // Check if message already exists
+                        const exists = this.messages.some(m => m.id === processedMessage.id);
+                        if (!exists) {
+                            this.messages.push(processedMessage);
+                            this.lastMessageId = Math.max(this.lastMessageId, processedMessage.id);
+                        }
                     });
                     
                     // Update unread count if chat closed
@@ -354,21 +432,21 @@ function chatWidget() {
                 }
             } catch (error) {
                 // Silent fail for polling
-                if (error.name !== 'TimeoutError') {
+                if (error.name !== 'TimeoutError' && error.name !== 'AbortError') {
                     console.log('📨 Polling error (silent):', error.message);
                 }
             }
         },
         
-        // Start polling (REDUCED TO 15s INTERVAL)
+        // Start polling
         startPolling() {
             this.stopPolling();
             this.polling = setInterval(() => {
-                if (!document.hidden) {
+                if (!document.hidden && this.conversationId) {
                     this.pollMessages();
                 }
-            }, 15000); // Changed from 5s to 15s to reduce spam
-            console.log('🔄 Polling started (15s interval)');
+            }, 10000); // 10s interval
+            console.log('🔄 Polling started (10s interval)');
         },
         
         // Stop polling
@@ -439,6 +517,21 @@ function chatWidget() {
             }
         },
         
+        // Format time
+        formatTime(dateString) {
+            if (!dateString) return '';
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleTimeString('id-ID', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: false 
+                });
+            } catch (error) {
+                return '';
+            }
+        },
+        
         // Get CSRF token
         getCsrfToken() {
             const token = document.querySelector('meta[name="csrf-token"]');
@@ -457,7 +550,7 @@ window.addEventListener('beforeunload', () => {
     // Alpine will handle cleanup automatically
 });
 
-console.log('✅ Alpine Chat Widget loaded - Final Version');
+console.log('✅ Fixed Alpine Chat Widget loaded');
 </script>
 
 <style>
