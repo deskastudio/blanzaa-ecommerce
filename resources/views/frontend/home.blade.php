@@ -45,27 +45,29 @@
                         </a>
                     </div>
                     
-                    <!-- Product Image -->
+                    <!-- Product Image with Dummy -->
                     <div class="absolute right-8 top-1/2 transform -translate-y-1/2 hidden lg:block">
-                        @if($heroProduct && $heroProduct->image_url)
-                            <img src="{{ $heroProduct->image_url }}" 
+                        @if($heroProduct && $heroProduct->image)
+                            <img src="{{ asset('storage/' . $heroProduct->image) }}" 
                                  alt="{{ $heroProduct->name }}" 
-                                 class="w-64 h-80 object-contain">
+                                 class="w-64 h-80 object-contain drop-shadow-2xl hero-product-image">
                         @else
-                            <div class="relative">
-                                <div class="w-48 h-80 bg-gradient-to-br from-purple-400 via-pink-400 to-purple-500 rounded-[3rem] p-2 shadow-2xl">
-                                    <div class="w-full h-full bg-black rounded-[2.5rem] flex items-center justify-center">
-                                        <i class="fas fa-mobile-alt text-6xl text-white"></i>
-                                    </div>
-                                </div>
-                            </div>
+                            <!-- Dummy iPhone 15 Pro Max Image -->
+                            <img src="{{ asset('images/iphone-15-pro-max.png') }}" 
+                                 alt="iPhone 15 Pro Max" 
+                                 class="w-64 h-80 object-contain drop-shadow-2xl hero-product-image"
+                                 onerror="this.src='https:via.placeholder.com/256x320/1f2937/ffffff?text=iPhone+15+Pro+Max'">
                         @endif
                     </div>
+                    
+                    <!-- Decorative Elements -->
+                    <div class="absolute right-0 top-0 w-32 h-32 bg-gradient-to-br from-red-500/20 to-transparent rounded-full blur-3xl"></div>
+                    <div class="absolute right-16 bottom-0 w-24 h-24 bg-gradient-to-br from-blue-500/20 to-transparent rounded-full blur-2xl"></div>
                     
                     <!-- Dots Indicator -->
                     <div class="absolute bottom-6 left-8 flex space-x-2">
                         @for($i = 0; $i < 5; $i++)
-                            <div class="w-3 h-3 {{ $i === 2 ? 'bg-red-500' : 'bg-gray-500' }} rounded-full"></div>
+                            <div class="w-3 h-3 {{ $i === 2 ? 'bg-red-500' : 'bg-gray-500' }} rounded-full cursor-pointer hover:bg-red-400 transition-colors"></div>
                         @endfor
                     </div>
                 </div>
@@ -472,6 +474,7 @@
                         return stripos($product->name, 'headphone') !== false 
                             || stripos($product->name, 'speaker') !== false
                             || stripos($product->name, 'audio') !== false
+                            || stripos($product->name, 'airpods') !== false
                             || stripos($product->category->name ?? '', 'audio') !== false
                             || stripos($product->category->name ?? '', 'headphone') !== false;
                     })->first();
@@ -482,8 +485,7 @@
                        class="inline-block bg-green-500 text-white px-8 py-3 rounded hover:bg-green-600 transition-colors font-medium">
                         Buy Now!
                     </a>
-
-                    @elseif($audioProduct)
+                @elseif($audioProduct)
                     <a href="{{ route('products.show', $audioProduct->slug) }}" 
                        class="inline-block bg-green-500 text-white px-8 py-3 rounded hover:bg-green-600 transition-colors font-medium">
                         Buy Now!
@@ -497,22 +499,35 @@
             </div>
             
             <div class="relative">
-                <div class="absolute inset-0 bg-gradient-to-r from-gray-400 to-gray-600 rounded-full opacity-20 blur-3xl"></div>
+                <!-- Background Gradient Effect -->
+                <div class="absolute inset-0 bg-gradient-to-r from-green-400/20 to-blue-500/20 rounded-full opacity-50 blur-3xl"></div>
+                <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-gradient-to-br from-green-300/10 to-blue-400/10 rounded-full blur-2xl"></div>
                 
-                @if($audioProduct && $audioProduct->image_url)
-                    <img src="{{ $audioProduct->image_url }}" 
+                @if($audioProduct && $audioProduct->image)
+                    <img src="{{ asset('storage/' . $audioProduct->image) }}" 
                          alt="{{ $audioProduct->name }}" 
-                         class="relative z-10 w-full max-w-md mx-auto object-contain">
+                         class="relative z-10 w-full max-w-md mx-auto object-contain drop-shadow-2xl">
                 @else
-                    <!-- Default Audio Product Image atau Placeholder -->
-                    <div class="relative z-10 w-full max-w-md mx-auto">
+                    <!-- AirPods Gen 2 Dummy Image -->
+                    <img src="{{ asset('images/airpods-gen-2.jpg') }}" 
+                         alt="AirPods Generation 2" 
+                         class="relative z-10 w-full max-w-md mx-auto object-contain drop-shadow-2xl"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    
+                    <!-- Fallback Icon jika gambar tidak ditemukan -->
+                    <div class="relative z-10 w-full max-w-md mx-auto hidden">
                         <div class="w-64 h-64 bg-gradient-to-br from-green-400 to-blue-500 rounded-full mx-auto flex items-center justify-center shadow-2xl">
-                            <i class="fas fa-volume-up text-6xl text-white"></i>
+                            <i class="fas fa-headphones text-6xl text-white"></i>
                         </div>
                     </div>
                 @endif
             </div>
         </div>
+        
+        <!-- Decorative Elements -->
+        <div class="absolute top-10 right-10 w-4 h-4 bg-green-400 rounded-full opacity-60"></div>
+        <div class="absolute bottom-10 left-10 w-6 h-6 bg-blue-400 rounded-full opacity-40"></div>
+        <div class="absolute top-1/2 left-10 w-2 h-2 bg-white rounded-full opacity-30"></div>
     </div>
 </section>
 
