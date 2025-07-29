@@ -47,8 +47,8 @@
                     
                     <!-- Product Image -->
                     <div class="absolute right-8 top-1/2 transform -translate-y-1/2 hidden lg:block">
-                        @if($heroProduct && $heroProduct->primary_image)
-                            <img src="{{ Storage::url($heroProduct->primary_image->image_path) }}" 
+                        @if($heroProduct && $heroProduct->image_url)
+                            <img src="{{ $heroProduct->image_url }}" 
                                  alt="{{ $heroProduct->name }}" 
                                  class="w-64 h-80 object-contain">
                         @else
@@ -153,15 +153,9 @@
                     
                     <!-- Product Image -->
                     <a href="{{ route('products.show', $product->slug) }}" class="flex items-center justify-center h-full">
-                        @if($product->primary_image)
-                            <img src="{{ Storage::url($product->primary_image->image_path) }}" 
-                                 alt="{{ $product->name }}" 
-                                 class="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-300">
-                        @else
-                            <div class="w-24 h-24 bg-gray-300 rounded flex items-center justify-center">
-                                <i class="fas fa-image text-2xl text-gray-500"></i>
-                            </div>
-                        @endif
+                        <img src="{{ $product->thumbnail }}" 
+                             alt="{{ $product->name }}" 
+                             class="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-300">
                     </a>
                     
                     <!-- Add to Cart Button -->
@@ -299,15 +293,9 @@
                 
                 <!-- Product Image -->
                 <a href="{{ route('products.show', $product->slug) }}" class="flex items-center justify-center h-full">
-                    @if($product->primary_image)
-                        <img src="{{ Storage::url($product->primary_image->image_path) }}" 
-                             alt="{{ $product->name }}" 
-                             class="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-300">
-                    @else
-                        <div class="w-24 h-24 bg-gray-300 rounded flex items-center justify-center">
-                            <i class="fas fa-image text-2xl text-gray-500"></i>
-                        </div>
-                    @endif
+                    <img src="{{ $product->thumbnail }}" 
+                         alt="{{ $product->name }}" 
+                         class="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-300">
                 </a>
                 
                 <!-- Add to Cart Button -->
@@ -396,15 +384,9 @@
                 
                 <!-- Product Image -->
                 <a href="{{ route('products.show', $product->slug) }}" class="flex items-center justify-center h-full">
-                    @if($product->primary_image)
-                        <img src="{{ Storage::url($product->primary_image->image_path) }}" 
-                             alt="{{ $product->name }}" 
-                             class="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-300">
-                    @else
-                        <div class="w-24 h-24 bg-gray-300 rounded flex items-center justify-center">
-                            <i class="fas fa-image text-2xl text-gray-500"></i>
-                        </div>
-                    @endif
+                    <img src="{{ $product->thumbnail }}" 
+                         alt="{{ $product->name }}" 
+                         class="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-300">
                 </a>
                 
                 <!-- Add to Cart Button -->
@@ -517,8 +499,8 @@
             <div class="relative">
                 <div class="absolute inset-0 bg-gradient-to-r from-gray-400 to-gray-600 rounded-full opacity-20 blur-3xl"></div>
                 
-                @if($audioProduct && $audioProduct->primary_image)
-                    <img src="{{ Storage::url($audioProduct->primary_image->image_path) }}" 
+                @if($audioProduct && $audioProduct->image_url)
+                    <img src="{{ $audioProduct->image_url }}" 
                          alt="{{ $audioProduct->name }}" 
                          class="relative z-10 w-full max-w-md mx-auto object-contain">
                 @else

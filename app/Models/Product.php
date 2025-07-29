@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
 
 class Product extends Model
 {
@@ -76,11 +77,51 @@ class Product extends Model
         return $this->hasMany(ShoppingCart::class);
     }
 
-    // Accessors
+    // Accessors untuk gambar
     public function getPrimaryImageAttribute()
     {
         return $this->images()->where('is_primary', true)->first() 
             ?? $this->images()->first();
+    }
+
+    // NEW: Accessor untuk URL gambar utama dengan prioritas
+    public function getImageUrlAttribute()
+    {
+        // Prioritas: kolom image -> primary image dari galeri -> null
+        if ($this->attributes['image']) {
+            return Storage::url($this->attributes['image']);
+        }
+        
+        $primaryImage = $this->primary_image;
+        return $primaryImage ? Storage::url($primaryImage->image_path) : null;
+    }
+
+    // NEW: Accessor untuk semua URL gambar
+    public function getImageUrlsAttribute()
+    {
+        $urls = [];
+        
+        // Tambahkan gambar utama jika ada
+        if ($this->attributes['image']) {
+            $urls[] = Storage::url($this->attributes['image']);
+        }
+        
+        // Tambahkan gambar dari galeri yang tidak primary (untuk menghindari duplikasi)
+        foreach ($this->images()->ordered()->get() as $image) {
+            $imageUrl = Storage::url($image->image_path);
+            if (!in_array($imageUrl, $urls)) {
+                $urls[] = $imageUrl;
+            }
+        }
+        
+        return $urls;
+    }
+
+    // NEW: Method untuk mendapatkan gambar yang akan ditampilkan di tabel
+    public function getDisplayImageAttribute()
+    {
+        // Prioritas: kolom image -> primary image dari galeri -> placeholder
+        return $this->attributes['image'] ?? $this->primary_image?->image_path;
     }
 
     public function getFormattedPriceAttribute()
@@ -228,5 +269,32 @@ class Product extends Model
         
         // Set new primary
         $this->images()->where('id', $imageId)->update(['is_primary' => true]);
+    }
+
+    // NEW: Helper method untuk mendapatkan thumbnail
+    public function getThumbnailAttribute()
+    {
+        $imagePath = $this->display_image;
+        return $imagePath ? Storage::url($imagePath) : asset('images/placeholder-product.png');
+    }
+
+    // NEW: Helper method untuk cek apakah ada gambar
+    public function hasImage(): bool
+    {
+        return !empty($this->attributes['image']) || $this->images()->exists();
+    }
+
+    // NEW: Helper method untuk mendapatkan total gambar
+    public function getTotalImagesAttribute(): int
+    {
+        $count = 0;
+        
+        if ($this->attributes['image']) {
+            $count++;
+        }
+        
+        $count += $this->images()->count();
+        
+        return $count;
     }
 }

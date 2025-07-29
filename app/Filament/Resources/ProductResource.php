@@ -76,6 +76,24 @@ class ProductResource extends Resource
                             ->helperText('Detailed product description'),
                     ])->columns(1),
 
+                Section::make('Product Image')
+                    ->schema([
+                        FileUpload::make('image')
+                            ->label('Primary Product Image')
+                            ->image()
+                            ->directory('products')
+                            ->visibility('public')
+                            ->maxSize(2048)
+                            ->imageEditor()
+                            ->imageEditorAspectRatios([
+                                '16:9',
+                                '4:3',
+                                '1:1',
+                            ])
+                            ->helperText('Main product image displayed in listings. Max size: 2MB')
+                            ->columnSpanFull(),
+                    ]),
+
                 Section::make('Product Details')
                     ->schema([
                         Grid::make(3)
@@ -190,7 +208,7 @@ class ProductResource extends Resource
     {
         return $table
             ->columns([
-                ImageColumn::make('primary_image.image_path')
+                ImageColumn::make('display_image')
                     ->label('Image')
                     ->circular()
                     ->size(60)
@@ -392,7 +410,7 @@ class ProductResource extends Resource
     public static function getRelations(): array
     {
         return [
-            // RelationManagers\ImagesRelationManager::class,
+            RelationManagers\ImagesRelationManager::class,
         ];
     }
 
